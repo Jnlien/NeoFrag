@@ -33,6 +33,10 @@ pub struct Access {
     is_admin: bool,
 }
 
+/// Modules dont l'administration peut être confiée à un groupe. Les modules système
+/// (membres, permissions, paramètres, modules, Live Editor…) restent aux administrateurs.
+pub const DELEGABLE: [&str; 11] = ["news", "pages", "forum", "events", "teams", "games", "awards", "recruits", "gallery", "partners", "talks"];
+
 impl Access {
     pub async fn load(db: &MySqlPool, user: Option<(u32, bool)>) -> sqlx::Result<Self> {
         let mut rules: HashMap<(String, String, u32), Rule> = HashMap::new();
@@ -148,9 +152,21 @@ impl Access {
         matches!(self.rules.get(&(module.to_owned(), action.to_owned(), id)), Some(Rule::Permissions(_)))
     }
 
-    /// Accès à l'administration. (Pour l'instant : administrateurs uniquement, voir ROADMAP.)
+    /// L'utilisateur est-il administrateur du site (tous les droits) ?
     pub fn admin(&self) -> bool {
         self.is_admin
+    }
+
+    /// Peut-il administrer ce module ? Les administrateurs toujours ; un autre membre
+    /// seulement si une règle explicite `(module, admin, 0)` autorise l'un de ses groupes.
+    /// (Une permission sans règle détaillée ne suffit jamais : elle vaudrait « tout le monde ».)
+    pub fn admin_of(&self, module: &str) -> bool {
+        self.is_admin || (self.user_id.is_some() && self.detailed(module, "admin", 0) && self.can(module, "admin", 0))
+    }
+
+    /// A-t-il accès à au moins une partie de l'administration ?
+    pub fn admin_any(&self) -> bool {
+        self.is_admin || DELEGABLE.iter().any(|module| self.admin_of(module))
     }
 }
 

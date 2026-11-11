@@ -10,6 +10,7 @@
 use super::admin::{self, admin_guard, Ctxt, CsrfOnly, Notice, Reply};
 use crate::{
     core::{
+        access::DELEGABLE,
         ctx::Ctx,
         form::{self, checkbox, fits, input},
         layout, mail,
@@ -443,7 +444,14 @@ struct Scope {
     actions: &'static [(&'static str, &'static str, bool)],
 }
 
-const SCOPES: [Scope; 3] = [
+const SCOPES: [Scope; 4] = [
+    Scope {
+        module: "admin",
+        title: "Administration des modules",
+        icon: "fas fa-tachometer-alt",
+        targets: "",
+        actions: &[("admin", "Administrer le module", true)],
+    },
     Scope {
         module: "talks",
         title: "Discussions",
@@ -483,13 +491,10 @@ pub async fn access_index(Extension(ctx): Ctxt) -> Reply {
     admin_guard!(ctx);
     let mut content = String::new();
     for scope in &SCOPES {
-        let rows = sqlx::query(scope.targets).fetch_all(&ctx.state.db).await?;
         let mut body = String::new();
-        for row in &rows {
-            let id: u32 = row.try_get("id")?;
+        for (id, title) in targets(&ctx, scope).await? {
             body.push_str(&format!(
-                "<tr><td>{}</td><td class=\"text-right\">{}</td></tr>",
-                text::clean(&row.try_get::<String, _>("title")?),
+                "<tr><td>{title}</td><td class=\"text-right\">{}</td></tr>",
                 admin::edit_button(&ctx, &format!("admin/access/{}/{id}", scope.module)),
             ));
         }
@@ -498,13 +503,39 @@ pub async fn access_index(Extension(ctx): Ctxt) -> Reply {
     admin::render(&ctx, "access", "Permissions", None, content)
 }
 
-async fn target_title(ctx: &Ctx, scope: &Scope, id: u32) -> Result<Option<String>, AppError> {
-    for row in sqlx::query(scope.targets).fetch_all(&ctx.state.db).await? {
-        if row.try_get::<u32, _>("id")? == id {
-            return Ok(Some(text::clean(&row.try_get::<String, _>("title")?)));
-        }
+/// Objets réglables d'un domaine : identifiant (dans l'URL) et titre.
+async fn targets(ctx: &Ctx, scope: &Scope) -> Result<Vec<(u32, String)>, AppError> {
+    if scope.module == "admin" {
+        // Un « objet » par module délégable, numéroté à partir de 1.
+        return Ok(DELEGABLE
+            .iter()
+            .enumerate()
+            .filter(|(_, module)| ctx.enabled(module))
+            .map(|(i, module)| {
+                let title = MODULE_TITLES.iter().find(|(name, _)| name == module).map(|(_, t)| *t).unwrap_or(module);
+                (i as u32 + 1, title.to_owned())
+            })
+            .collect());
     }
-    Ok(None)
+    let mut list = Vec::new();
+    for row in sqlx::query(scope.targets).fetch_all(&ctx.state.db).await? {
+        list.push((row.try_get("id")?, text::clean(&row.try_get::<String, _>("title")?)));
+    }
+    Ok(list)
+}
+
+async fn target_title(ctx: &Ctx, scope: &Scope, id: u32) -> Result<Option<String>, AppError> {
+    Ok(targets(ctx, scope).await?.into_iter().find(|(target, _)| *target == id).map(|(_, title)| title))
+}
+
+/// Clé `(module, id)` de `nf_access` pour un objet. L'administration d'un module est
+/// enregistrée sous le nom du module, avec l'identifiant 0.
+fn access_key(scope: &Scope, id: u32) -> (&'static str, u32) {
+    if scope.module == "admin" {
+        (DELEGABLE.get(id as usize - 1).copied().unwrap_or("admin"), 0)
+    } else {
+        (scope.module, id)
+    }
 }
 
 /// Groupes réglables : groupes personnalisés, puis membres et visiteurs.
@@ -529,8 +560,8 @@ pub async fn access_edit(Extension(ctx): Ctxt, Path((module, id)): Path<(String,
          INNER JOIN nf_access_details d ON d.access_id = a.access_id \
          WHERE a.module = ? AND a.id = ? AND d.type = 'group'",
     )
-    .bind(scope.module)
-    .bind(id)
+    .bind(access_key(scope, id).0)
+    .bind(access_key(scope, id).1)
     .fetch_all(&ctx.state.db)
     .await?;
     let mut current: HashMap<(String, String), bool> = HashMap::new();
@@ -581,17 +612,18 @@ pub async fn access_save(Extension(ctx): Ctxt, Path((module, id)): Path<(String,
         return layout::not_found(&ctx).await;
     }
     let entities = entities(&ctx).await?;
+    let (key_module, key_id) = access_key(scope, id);
     let mut tx = ctx.state.db.begin().await?;
     for (action, _, restricted) in scope.actions {
         sqlx::query("INSERT IGNORE INTO nf_access (id, module, action) VALUES (?, ?, ?)")
-            .bind(id)
-            .bind(scope.module)
+            .bind(key_id)
+            .bind(key_module)
             .bind(action)
             .execute(&mut *tx)
             .await?;
         let access_id: u32 = sqlx::query_scalar("SELECT access_id FROM nf_access WHERE id = ? AND module = ? AND action = ?")
-            .bind(id)
-            .bind(scope.module)
+            .bind(key_id)
+            .bind(key_module)
             .bind(action)
             .fetch_one(&mut *tx)
             .await?;

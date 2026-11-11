@@ -84,6 +84,8 @@ pub fn render(ctx: &Ctx, active: &str, title: &str, notice: Option<&str>, conten
         menu: MENU
             .iter()
             .filter(|item| item.4.is_empty() || ctx.enabled(item.4))
+            // Un membre délégué ne voit que le tableau de bord et ses modules.
+            .filter(|item| ctx.access.admin() || item.0 == "admin" || ctx.access.admin_of(item.0))
             .map(|item| (item.0, item.1, item.2, item.3))
             .collect(),
         csrf: ctx.csrf_token(),
@@ -98,6 +100,16 @@ pub fn render(ctx: &Ctx, active: &str, title: &str, notice: Option<&str>, conten
 /// Refuse l'accès aux non-administrateurs (réponse à renvoyer telle quelle).
 pub async fn deny(ctx: &Ctx) -> Option<Reply> {
     if ctx.access.admin() {
+        None
+    } else {
+        Some(layout::forbidden(ctx).await)
+    }
+}
+
+/// Refuse l'accès à qui ne peut pas administrer ce module (administrateurs, ou groupe
+/// auquel l'administration du module a été confiée).
+pub async fn deny_module(ctx: &Ctx, module: &str) -> Option<Reply> {
+    if ctx.access.admin_of(module) {
         None
     } else {
         Some(layout::forbidden(ctx).await)
@@ -284,7 +296,9 @@ macro_rules! admin_guard {
         if !$ctx.enabled($module) {
             return $crate::core::layout::not_found(&$ctx).await;
         }
-        $crate::modules::admin::admin_guard!($ctx);
+        if let Some(denied) = $crate::modules::admin::deny_module(&$ctx, $module).await {
+            return denied;
+        }
     };
 }
 pub(crate) use admin_guard;
@@ -320,8 +334,8 @@ pub fn badge(on: bool, yes: &str, no: &str) -> String {
 // Tableau de bord
 
 pub async fn dashboard(Extension(ctx): Ctxt) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
-        return denied;
+    if !ctx.access.admin_any() {
+        return layout::forbidden(&ctx).await;
     }
     let db = &ctx.state.db;
     let count = |sql: &'static str| sqlx::query_scalar::<_, i64>(sql).fetch_one(db);
@@ -357,7 +371,7 @@ pub async fn dashboard(Extension(ctx): Ctxt) -> Reply {
 // Actualités
 
 pub async fn news_list(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let db = &ctx.state.db;
@@ -506,7 +520,7 @@ async fn category_exists(ctx: &Ctx, category_id: u32) -> Result<bool, AppError> 
 }
 
 pub async fn news_add_get(Extension(ctx): Ctxt) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let form = NewsForm {
@@ -517,7 +531,7 @@ pub async fn news_add_get(Extension(ctx): Ctxt) -> Reply {
 }
 
 pub async fn news_add_post(Extension(ctx): Ctxt, multipart: Multipart) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let mut data = read_upload_form(&ctx, multipart).await?;
@@ -558,7 +572,7 @@ pub async fn news_add_post(Extension(ctx): Ctxt, multipart: Multipart) -> Reply 
 }
 
 pub async fn news_edit_get(Extension(ctx): Ctxt, Path((id, _slug)): Path<(String, String)>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let Ok(id) = id.parse::<u32>() else {
@@ -584,7 +598,7 @@ pub async fn news_edit_post(
     Path((id, slug)): Path<(String, String)>,
     multipart: Multipart,
 ) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let mut data = read_upload_form(&ctx, multipart).await?;
@@ -639,7 +653,7 @@ pub struct CsrfOnly {
 }
 
 pub async fn news_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): Form<CsrfOnly>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;
@@ -685,14 +699,14 @@ fn validate_category(form: &CategoryForm) -> Result<String, &'static str> {
 }
 
 pub async fn category_add_get(Extension(ctx): Ctxt) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     category_form(&ctx, "admin/news/categories/add", &CategoryForm::default(), None, "Ajouter une catégorie")
 }
 
 pub async fn category_add_post(Extension(ctx): Ctxt, multipart: Multipart) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let mut data = read_upload_form(&ctx, multipart).await?;
@@ -726,7 +740,7 @@ pub async fn category_add_post(Extension(ctx): Ctxt, multipart: Multipart) -> Re
 }
 
 pub async fn category_edit_get(Extension(ctx): Ctxt, Path((id, _name)): Path<(String, String)>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let category = news::categories(&ctx.state.db, ctx.lang())
@@ -749,7 +763,7 @@ pub async fn category_edit_post(
     Path((id, _name)): Path<(String, String)>,
     multipart: Multipart,
 ) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     let mut data = read_upload_form(&ctx, multipart).await?;
@@ -796,7 +810,7 @@ pub async fn category_edit_post(
 }
 
 pub async fn category_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): Form<CsrfOnly>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "news").await {
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;
@@ -829,7 +843,7 @@ pub async fn category_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(for
 // Pages
 
 pub async fn pages_list(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "pages").await {
         return denied;
     }
     let rows = sqlx::query(
@@ -932,7 +946,7 @@ async fn validate_page(ctx: &Ctx, form: &PageForm, current_id: Option<u32>) -> R
 }
 
 pub async fn page_add_get(Extension(ctx): Ctxt) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "pages").await {
         return denied;
     }
     let form = PageForm {
@@ -943,7 +957,7 @@ pub async fn page_add_get(Extension(ctx): Ctxt) -> Reply {
 }
 
 pub async fn page_add_post(Extension(ctx): Ctxt, Form(form): Form<PageForm>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "pages").await {
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;
@@ -977,7 +991,7 @@ pub async fn page_add_post(Extension(ctx): Ctxt, Form(form): Form<PageForm>) -> 
 }
 
 pub async fn page_edit_get(Extension(ctx): Ctxt, Path((id, _slug)): Path<(String, String)>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "pages").await {
         return denied;
     }
     let row = sqlx::query(
@@ -1008,7 +1022,7 @@ pub async fn page_edit_post(
     Path((id, _slug)): Path<(String, String)>,
     Form(form): Form<PageForm>,
 ) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "pages").await {
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;
@@ -1049,7 +1063,7 @@ pub async fn page_edit_post(
 }
 
 pub async fn page_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): Form<CsrfOnly>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
+    if let Some(denied) = deny_module(&ctx, "pages").await {
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;

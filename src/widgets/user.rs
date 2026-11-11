@@ -33,7 +33,7 @@ pub fn index_mini(ctx: &Ctx, settings: &Value) -> String {
                 ctx.url("user"),
                 current.username
             ));
-            if ctx.access.admin() {
+            if ctx.access.admin_any() {
                 out.push_str(&item("Administration", "admin", "fas fa-tachometer-alt"));
             }
             // Déconnexion en POST (avec jeton) : un simple lien pourrait être déclenché par un site tiers.
@@ -98,7 +98,7 @@ pub async fn index(ctx: &Ctx) -> Result<Vec<Block>, AppError> {
         entry("fas fa-cogs", "user/account", "Gérer mon compte"),
         entry("far fa-envelope", "user/messages", &messages),
     );
-    if ctx.access.admin() {
+    if ctx.access.admin_any() {
         body.push_str(&entry("fas fa-tachometer-alt", "admin", "Administration"));
     }
     body.push_str("</ul>");
