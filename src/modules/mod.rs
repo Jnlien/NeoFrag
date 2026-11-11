@@ -9,6 +9,7 @@ pub mod events;
 pub mod forum;
 pub mod gallery;
 pub mod games;
+pub mod live_editor;
 pub mod members;
 pub mod news;
 pub mod pages;

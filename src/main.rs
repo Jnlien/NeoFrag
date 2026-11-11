@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, recruits, search, settings, system, talks, teams, user,
+        account, admin, awards, comments, contact, events, forum, gallery, games, live_editor, members, news, pages, partners, recovery, recruits, search, settings, system, talks, teams, user,
     },
     state::AppState,
 };
@@ -217,6 +217,13 @@ fn router(state: AppState) -> Router {
         .route("/admin/talks/add", get(talks::admin_add_get).post(talks::admin_add_post))
         .route("/admin/talks/delete/{id}", post(talks::admin_delete))
         .route("/admin/talks/{id}/{slug}", get(talks::admin_edit_get).post(talks::admin_edit_post))
+        .route("/admin/live-editor", get(live_editor::index))
+        .route("/admin/live-editor/dispositions/add", post(live_editor::disposition_add))
+        .route("/admin/live-editor/dispositions/delete/{id}", post(live_editor::disposition_delete))
+        .route("/admin/live-editor/{id}/rows/{index}/{direction}", post(live_editor::row_move))
+        .route("/admin/live-editor/{id}/widgets/add", post(live_editor::widget_add))
+        .route("/admin/live-editor/{id}/widgets/delete/{widget_id}", post(live_editor::widget_delete))
+        .route("/admin/live-editor/{id}/widgets/{widget_id}", get(live_editor::widget_edit_get).post(live_editor::widget_edit_post))
         .route("/admin/addons", get(system::addons))
         .route("/admin/addons/toggle/{id}", post(system::addon_toggle))
         .route("/admin/access", get(system::access_index))

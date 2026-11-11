@@ -247,20 +247,17 @@ impl Parser<'_> {
 }
 
 /// Écriture au format PHP. Les propriétés d'objet reçoivent le préfixe `\0*\0` (protected)
-/// attendu par NeoFrag. Servira à l'édition des widgets et des dispositions (ROADMAP).
-#[allow(dead_code)]
+/// attendu par NeoFrag.
 pub fn serialize(value: &Value) -> String {
     let mut out = String::new();
     write_value(&mut out, value);
     out
 }
 
-#[allow(dead_code)]
 fn write_str(out: &mut String, s: &str) {
     let _ = write!(out, "s:{}:\"{}\";", s.len(), s);
 }
 
-#[allow(dead_code)]
 fn write_value(out: &mut String, value: &Value) {
     match value {
         Value::Null => out.push_str("N;"),
