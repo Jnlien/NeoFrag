@@ -65,6 +65,8 @@ pub async fn render(
         ("partners", "column") => modules::partners::widget(ctx, settings, true).await?,
         ("partners", _) => modules::partners::widget(ctx, settings, false).await?,
         ("awards", _) => modules::awards::widget(ctx).await?,
+        ("recruits", _) => modules::recruits::widget(ctx).await?,
+        ("talks", _) => modules::talks::widget(ctx, settings).await?,
         ("events", kind) => modules::events::widget(ctx, kind).await?,
         _ => {
             tracing::debug!(widget = name, kind, "widget pas encore porté");

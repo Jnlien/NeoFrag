@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, search, teams, user,
+        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, recruits, search, talks, teams, user,
     },
     state::AppState,
 };
@@ -122,6 +122,14 @@ fn router(state: AppState) -> Router {
         .route("/forum/{*rest}", get(forum::route))
         .route("/gallery", get(gallery::index))
         .route("/gallery/{*rest}", get(gallery::route))
+        .route("/recruits", get(recruits::index))
+        .route("/recruits/postulate/{id}/{slug}", get(recruits::apply_get).post(recruits::apply_post))
+        .route("/recruits/candidacy/{id}/{slug}", get(recruits::candidacy))
+        .route("/recruits/{id}/{slug}", get(recruits::show))
+        .route("/talks", get(talks::index))
+        .route("/talks/add/{id}", post(talks::add))
+        .route("/talks/delete/{id}", post(talks::delete))
+        .route("/talks/{*rest}", get(talks::route))
         .route("/comments/add", post(comments::add))
         .route("/comments/delete/{id}", post(comments::delete))
         .route("/user/{id}/{slug}", get(user::profile))
@@ -199,6 +207,16 @@ fn router(state: AppState) -> Router {
                 state.config.site.max_upload_mb.saturating_mul(1024 * 1024).saturating_mul(gallery::MAX_IMAGES_PER_UPLOAD),
             )),
         )
+        .route("/admin/recruits", get(recruits::admin_list))
+        .route("/admin/recruits/add", get(recruits::admin_add_get).post(recruits::admin_add_post))
+        .route("/admin/recruits/delete/{id}", post(recruits::admin_delete))
+        .route("/admin/recruits/candidacies/{id}", get(recruits::admin_candidacy).post(recruits::admin_decide))
+        .route("/admin/recruits/candidacies/{id}/vote", post(recruits::admin_vote))
+        .route("/admin/recruits/{id}/{slug}", get(recruits::admin_edit_get).post(recruits::admin_edit_post))
+        .route("/admin/talks", get(talks::admin_list))
+        .route("/admin/talks/add", get(talks::admin_add_get).post(talks::admin_add_post))
+        .route("/admin/talks/delete/{id}", post(talks::admin_delete))
+        .route("/admin/talks/{id}/{slug}", get(talks::admin_edit_get).post(talks::admin_edit_post))
         .route("/admin/user", get(admin::users))
         .route("/admin/user/role/{id}", post(admin::user_role))
         .route("/admin/user/delete/{id}", post(admin::user_delete))

@@ -14,6 +14,8 @@ pub mod news;
 pub mod pages;
 pub mod partners;
 pub mod recovery;
+pub mod recruits;
 pub mod search;
+pub mod talks;
 pub mod teams;
 pub mod user;

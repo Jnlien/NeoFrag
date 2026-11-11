@@ -143,6 +143,11 @@ impl Access {
             .unwrap_or(default)
     }
 
+    /// La permission a-t-elle des règles détaillées (et pas seulement « tout le monde ») ?
+    pub fn detailed(&self, module: &str, action: &str, id: u32) -> bool {
+        matches!(self.rules.get(&(module.to_owned(), action.to_owned(), id)), Some(Rule::Permissions(_)))
+    }
+
     /// Accès à l'administration. (Pour l'instant : administrateurs uniquement, voir ROADMAP.)
     pub fn admin(&self) -> bool {
         self.is_admin
