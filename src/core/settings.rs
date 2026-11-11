@@ -32,7 +32,6 @@ impl Settings {
         self.get(name).trim().parse().unwrap_or(0)
     }
 
-    #[allow(dead_code)] // réglages booléens (maintenance, inscriptions…) : modules à venir
     pub fn bool(&self, name: &str) -> bool {
         !matches!(self.get(name).trim(), "" | "0" | "false")
     }

@@ -200,7 +200,7 @@ pub async fn middleware(
         }
     }
 
-    request.extensions_mut().insert(Arc::new(Ctx {
+    let ctx = Arc::new(Ctx {
         state: state.clone(),
         settings,
         session_id,
@@ -210,9 +210,13 @@ pub async fn middleware(
         path,
         ip,
         user_agent,
-    }));
-
-    let mut response = next.run(request).await;
+    });
+    let mut response = if crate::modules::settings::closed_for(&ctx) {
+        crate::modules::settings::maintenance_page(&ctx)
+    } else {
+        request.extensions_mut().insert(ctx);
+        next.run(request).await
+    };
     // Ne pas écraser un cookie de session posé par le handler (connexion).
     if let Some(cookie) = new_cookie {
         if !response.headers().contains_key(header::SET_COOKIE) {

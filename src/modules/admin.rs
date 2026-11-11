@@ -11,7 +11,6 @@ use crate::{
         files::{self, Fit, FormData},
         form::{checkbox, csrf_field, fits, input, textarea},
         layout,
-        settings::Settings,
         text,
     },
     error::AppError,
@@ -1157,88 +1156,6 @@ pub async fn user_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): 
     sqlx::query("DELETE FROM nf_session WHERE user_id = ?").bind(id).execute(&mut *tx).await?;
     tx.commit().await?;
     redirect(&ctx, "admin/user?ok=1")
-}
-
-// ---------------------------------------------------------------------------
-// Paramètres
-
-#[derive(Deserialize)]
-pub struct SettingsForm {
-    #[serde(default)]
-    csrf: String,
-    #[serde(default)]
-    nf_name: String,
-    #[serde(default)]
-    nf_description: String,
-    #[serde(default)]
-    nf_default_page: String,
-    #[serde(default)]
-    news_per_page: String,
-}
-
-fn settings_form(ctx: &Ctx, form: &SettingsForm, error: Option<&str>, notice: Option<&str>) -> Reply {
-    let fields = format!(
-        "{}{}{}{}",
-        input("Nom du site", "nf_name", &form.nf_name, 100, true, ""),
-        input("Description", "nf_description", &form.nf_description, 200, false, ""),
-        input(
-            "Page d'accueil",
-            "nf_default_page",
-            &form.nf_default_page,
-            100,
-            true,
-            "« news », « members » ou le chemin d'accès d'une page."
-        ),
-        input("Actualités par page", "news_per_page", &form.news_per_page, 3, true, ""),
-    );
-    render(ctx, "settings", "Paramètres", notice, form_card(ctx, "admin/settings", error, fields, "admin"))
-}
-
-pub async fn settings_get(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
-        return denied;
-    }
-    let form = SettingsForm {
-        csrf: String::new(),
-        nf_name: text::decode(ctx.settings.get("nf_name")),
-        nf_description: text::decode(ctx.settings.get("nf_description")),
-        nf_default_page: ctx.settings.get("nf_default_page").to_owned(),
-        news_per_page: ctx.settings.get("news_per_page").to_owned(),
-    };
-    settings_form(&ctx, &form, None, notice.message())
-}
-
-pub async fn settings_post(Extension(ctx): Ctxt, Form(form): Form<SettingsForm>) -> Reply {
-    if let Some(denied) = deny(&ctx).await {
-        return denied;
-    }
-    check_csrf(&ctx, &form.csrf)?;
-
-    let per_page = form.news_per_page.trim().parse::<u32>().ok().filter(|n| (1..=100).contains(n));
-    let default_page = form.nf_default_page.trim().trim_matches('/').to_owned();
-    let valid_page = !default_page.is_empty()
-        && default_page
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    let error = if form.nf_name.trim().is_empty() {
-        Some("Le nom du site est obligatoire.")
-    } else if per_page.is_none() {
-        Some("Le nombre d'actualités par page doit être compris entre 1 et 100.")
-    } else if !valid_page {
-        Some("Page d'accueil invalide.")
-    } else {
-        None
-    };
-    let (None, Some(per_page)) = (error, per_page) else {
-        return settings_form(&ctx, &form, error.or(Some("Formulaire invalide.")), None);
-    };
-
-    let db = &ctx.state.db;
-    Settings::set(db, "nf_name", &text::encode(form.nf_name.trim()), "string").await?;
-    Settings::set(db, "nf_description", &text::encode(form.nf_description.trim()), "string").await?;
-    Settings::set(db, "nf_default_page", &default_page, "string").await?;
-    Settings::set(db, "news_per_page", &per_page.to_string(), "int").await?;
-    redirect(&ctx, "admin/settings?ok=1")
 }
 
 #[cfg(test)]

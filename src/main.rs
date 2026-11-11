@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, recruits, search, system, talks, teams, user,
+        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, recruits, search, settings, system, talks, teams, user,
     },
     state::AppState,
 };
@@ -232,7 +232,10 @@ fn router(state: AppState) -> Router {
         .route("/admin/user", get(admin::users))
         .route("/admin/user/role/{id}", post(admin::user_role))
         .route("/admin/user/delete/{id}", post(admin::user_delete))
-        .route("/admin/settings", get(admin::settings_get).post(admin::settings_post))
+        .route("/admin/settings", get(settings::index))
+        .route("/admin/settings/{section}", get(settings::section_get).post(settings::section_post))
+        .route("/robots.txt", get(settings::robots_txt))
+        .route("/humans.txt", get(settings::humans_txt))
         .fallback(fallback)
         // Corps de requête : un fichier envoyé plus une marge pour les autres champs.
         .layer(DefaultBodyLimit::max(

@@ -16,6 +16,7 @@ pub mod partners;
 pub mod recovery;
 pub mod recruits;
 pub mod search;
+pub mod settings;
 pub mod system;
 pub mod talks;
 pub mod teams;
