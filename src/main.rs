@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, games, members, news, pages, partners, recovery, search, teams, user,
+        account, admin, awards, comments, contact, events, forum, games, members, news, pages, partners, recovery, search, teams, user,
     },
     state::AppState,
 };
@@ -111,6 +111,15 @@ fn router(state: AppState) -> Router {
         .route("/events", get(events::index))
         .route("/events/participant/{id}", post(events::participate))
         .route("/events/{*rest}", get(events::route))
+        // Forum
+        .route("/forum", get(forum::index))
+        .route("/forum/mark-all-as-read", post(forum::mark_all_read))
+        .route("/forum/new/{forum_id}", post(forum::new_topic))
+        .route("/forum/reply/{topic_id}", post(forum::reply))
+        .route("/forum/message/edit/{id}", post(forum::edit_message))
+        .route("/forum/message/delete/{id}", post(forum::delete_message))
+        .route("/forum/moderate/{action}/{id}", post(forum::moderate))
+        .route("/forum/{*rest}", get(forum::route))
         .route("/comments/add", post(comments::add))
         .route("/comments/delete/{id}", post(comments::delete))
         .route("/user/{id}/{slug}", get(user::profile))
@@ -168,6 +177,12 @@ fn router(state: AppState) -> Router {
         .route("/admin/events/{id}/rounds/add", post(events::admin_round_add))
         .route("/admin/events/{id}/participants/add", post(events::admin_participant_add))
         .route("/admin/events/{id}/participants/delete/{user_id}", post(events::admin_participant_delete))
+        .route("/admin/forum", get(forum::admin_list))
+        .route("/admin/forum/add", get(forum::admin_add_get).post(forum::admin_add_post))
+        .route("/admin/forum/delete/{id}", post(forum::admin_delete))
+        .route("/admin/forum/categories/add", post(forum::admin_category_add))
+        .route("/admin/forum/categories/delete/{id}", post(forum::admin_category_delete))
+        .route("/admin/forum/{id}/{slug}", get(forum::admin_edit_get).post(forum::admin_edit_post))
         .route("/admin/user", get(admin::users))
         .route("/admin/user/role/{id}", post(admin::user_role))
         .route("/admin/user/delete/{id}", post(admin::user_delete))

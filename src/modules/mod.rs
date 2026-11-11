@@ -6,6 +6,7 @@ pub mod awards;
 pub mod comments;
 pub mod contact;
 pub mod events;
+pub mod forum;
 pub mod games;
 pub mod members;
 pub mod news;
