@@ -80,6 +80,29 @@ async fn readable_categories(ctx: &Ctx) -> Result<String, AppError> {
 const CATEGORY_OF: &str = "IF(f.is_subforum = '1', pf.parent_id, f.parent_id)";
 const PARENT_JOIN: &str = "LEFT JOIN nf_forum pf ON f.is_subforum = '1' AND pf.forum_id = f.parent_id";
 
+/// Recherche : sujets dont le titre ou un message contient le motif, dans les
+/// catégories que le visiteur peut lire. Renvoie (chemin, titre).
+pub async fn search(ctx: &Ctx, pattern: &str) -> Result<Vec<(String, String)>, AppError> {
+    let readable = readable_categories(ctx).await?;
+    let rows = sqlx::query(&format!(
+        "SELECT t.topic_id, t.title FROM nf_forum_topics t \
+         INNER JOIN nf_forum f ON f.forum_id = t.forum_id {PARENT_JOIN} \
+         WHERE {CATEGORY_OF} IN ({readable}) AND (t.title LIKE ? OR EXISTS \
+            (SELECT 1 FROM nf_forum_messages m WHERE m.topic_id = t.topic_id AND m.message LIKE ?)) \
+         ORDER BY t.last_message_id DESC LIMIT 20"
+    ))
+    .bind(pattern)
+    .bind(pattern)
+    .fetch_all(&ctx.state.db)
+    .await?;
+    let mut found = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let title = text::clean(&row.try_get::<String, _>("title")?);
+        found.push((topic_path(row.try_get("topic_id")?, &title), title));
+    }
+    Ok(found)
+}
+
 struct Forum {
     forum_id: u32,
     title: String,

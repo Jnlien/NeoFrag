@@ -43,6 +43,7 @@ const MENU: &[(&str, &str, &str, &str, &str)] = &[
     ("gallery", "admin/gallery", "far fa-image", "Galerie", "gallery"),
     ("partners", "admin/partners", "far fa-handshake", "Partenaires", "partners"),
     ("talks", "admin/talks", "far fa-comment-dots", "Discussions", "talks"),
+    ("comments", "admin/comments", "far fa-comments", "Commentaires", ""),
     ("user", "admin/user", "fas fa-users", "Membres", ""),
     ("access", "admin/access", "fas fa-unlock-alt", "Permissions", ""),
     ("live_editor", "admin/live-editor", "fas fa-desktop", "Live Editor", ""),

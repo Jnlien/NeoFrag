@@ -6,7 +6,8 @@
 //! renommée ni supprimée, comme dans l'original.
 //!
 //! Différences avec l'original :
-//! - pas de rafraîchissement automatique en JavaScript : la page se recharge à l'envoi ;
+//! - les messages se rafraîchissent toutes les dix secondes (l'original interroge le
+//!   serveur en continu) ; l'envoi recharge la page ;
 //! - écrire demande d'être connecté (défaut de l'original : visiteurs refusés) ;
 //! - sans règle détaillée, seuls l'auteur d'un message et les administrateurs peuvent
 //!   le supprimer (défaut de l'original : administrateurs).
@@ -158,6 +159,36 @@ fn messages_html(ctx: &Ctx, talk_id: u32, list: &[Message], back: &str) -> Strin
     html
 }
 
+/// Liste des messages, rafraîchie périodiquement par un petit script (sans lui, la
+/// liste reste simplement celle du chargement de la page).
+fn live_messages(ctx: &Ctx, talk_id: u32, list: &[Message], back: &str, limit: i64) -> String {
+    format!(
+        "<div data-talk=\"{}\">{}</div><script>(function(){{var b=document.currentScript.previousElementSibling;\
+         setInterval(function(){{if(document.hidden)return;fetch(b.dataset.talk,{{credentials:'same-origin'}})\
+         .then(function(r){{return r.ok?r.text():null}}).then(function(h){{if(h!==null)b.innerHTML=h}}).catch(function(){{}})}},10000)}})();</script>",
+        text::encode(&ctx.url(&format!("talks/messages/{talk_id}?n={limit}&back={back}"))),
+        messages_html(ctx, talk_id, list, back),
+    )
+}
+
+#[derive(Deserialize)]
+pub struct FragmentQuery {
+    #[serde(default)]
+    n: i64,
+    #[serde(default)]
+    back: String,
+}
+
+/// `talks/messages/{id}` : fragment HTML des derniers messages (rafraîchissement).
+pub async fn fragment(Extension(ctx): Ctxt, Path(id): Path<u32>, Query(query): Query<FragmentQuery>) -> Reply {
+    if !ctx.enabled("talks") || !can_read(&ctx, id) || find(&ctx, id).await?.is_none() {
+        return layout::not_found(&ctx).await;
+    }
+    let list = messages(&ctx, id, query.n.clamp(1, PER_PAGE), 0).await?;
+    let back = safe_back(&query.back).unwrap_or("");
+    Ok(axum::response::Html(messages_html(&ctx, id, &list, back)).into_response())
+}
+
 fn write_form(ctx: &Ctx, talk_id: u32, back: &str) -> String {
     if !can_write(ctx, talk_id) {
         return if ctx.user.is_none() {
@@ -248,7 +279,7 @@ pub async fn route(Extension(ctx): Ctxt, Path(rest): Path<String>) -> Reply {
     let mut blocks = vec![Block::Panel(
         Panel::new()
             .heading(talk.name.clone(), ICON)
-            .body_raw(messages_html(&ctx, id, &list, &path))
+            .body_raw(if page == 1 { live_messages(&ctx, id, &list, &path, PER_PAGE) } else { messages_html(&ctx, id, &list, &path) })
             .footer(write_form(&ctx, id, &path), false),
     )];
     if let Some(panel) = pagination.panel(&ctx.url(&path)) {
@@ -354,7 +385,7 @@ pub async fn widget(ctx: &Ctx, settings: &Value) -> Result<Vec<Block>, AppError>
     Ok(vec![Block::Panel(
         Panel::new()
             .heading(talk.name.clone(), ICON)
-            .body_raw(messages_html(ctx, talk_id, &list, &back))
+            .body_raw(live_messages(ctx, talk_id, &list, &back, 10))
             .footer(
                 format!(
                     "{}<div class=\"text-right mt-2\"><a href=\"{}\"><small>Tous les messages</small></a></div>",

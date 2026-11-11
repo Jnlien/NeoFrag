@@ -1,5 +1,5 @@
-//! Module Recherche : actualités et pages. Version simplifiée de `modules/search`
-//! (l'original interroge chaque module ; ici on couvre ceux qui sont portés).
+//! Module Recherche : actualités, pages, sujets du forum et membres.
+//! Version simplifiée de `modules/search` (l'original interroge chaque module).
 
 use crate::{
     core::{
@@ -98,6 +98,28 @@ pub async fn index(Extension(ctx): Extension<Arc<Ctx>>, Query(params): Query<Par
                 "<li class=\"list-group-item\">{} <a href=\"{}\">{title}</a> <span class=\"badge badge-secondary float-right\">Page</span></li>",
                 text::icon("far fa-file"),
                 text::encode(&ctx.url(&name))
+            ));
+        }
+
+        if ctx.enabled("forum") {
+            for (path, title) in super::forum::search(&ctx, &pattern).await? {
+                results.push_str(&format!(
+                    "<li class=\"list-group-item\">{} <a href=\"{}\">{title}</a> <span class=\"badge badge-info float-right\">Forum</span></li>",
+                    text::icon("fas fa-comments"),
+                    ctx.url(&path)
+                ));
+            }
+        }
+        let members = sqlx::query("SELECT id, username FROM nf_user WHERE deleted = '0' AND username LIKE ? ORDER BY username LIMIT 20")
+            .bind(&pattern)
+            .fetch_all(db)
+            .await?;
+        for row in &members {
+            let username = text::clean(&row.try_get::<String, _>("username")?);
+            results.push_str(&format!(
+                "<li class=\"list-group-item\">{} {} <span class=\"badge badge-light float-right\">Membre</span></li>",
+                text::icon("fas fa-user"),
+                crate::core::user::link(ctx.base(), row.try_get("id")?, &username)
             ));
         }
 

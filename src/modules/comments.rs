@@ -1,8 +1,8 @@
 //! Module Commentaires (`nf_comment`), porté de `modules/comments`.
 //!
 //! Un commentaire est rattaché à un contenu par le couple (module, identifiant). Seules
-//! les actualités en accueillent pour l'instant ; chaque module porté s'ajoutera dans
-//! [`target_path`]. Comme dans l'original, il faut être connecté pour commenter, et
+//! les actualités, les événements et les images de galerie en accueillent (voir
+//! [`target_path`]). Comme dans l'original, il faut être connecté pour commenter, et
 //! l'auteur ou un administrateur peut supprimer. (Les réponses à un commentaire
 //! étaient encore « TODO » dans l'original : l'affichage les gère, pas la saisie.)
 
@@ -234,6 +234,47 @@ pub async fn delete(
 
     let path = target_path(&ctx, &module, module_id).await?.unwrap_or_default();
     Ok(Redirect::to(&format!("{}#comments", ctx.url(&path))).into_response())
+}
+
+// ---------------------------------------------------------------------------
+// Administration
+
+/// `admin/comments` : les derniers commentaires du site, tous contenus confondus.
+pub async fn admin_list(Extension(ctx): Extension<Arc<Ctx>>) -> Result<Response, AppError> {
+    if let Some(denied) = super::admin::deny(&ctx).await {
+        return denied;
+    }
+    let rows = sqlx::query(
+        "SELECT c.id, c.user_id, c.module, c.module_id, c.content, CAST(c.date AS DATETIME) AS date, u.username \
+         FROM nf_comment c LEFT JOIN nf_user u ON u.id = c.user_id \
+         WHERE c.content <> '' ORDER BY c.id DESC LIMIT 100",
+    )
+    .fetch_all(&ctx.state.db)
+    .await?;
+    let mut body = String::new();
+    for row in &rows {
+        let id: u32 = row.try_get("id")?;
+        let module: String = row.try_get("module")?;
+        let module_id: u32 = row.try_get("module_id")?;
+        let date: NaiveDateTime = row.try_get("date")?;
+        let content = text::clean(&row.try_get::<String, _>("content")?);
+        let author = match row.try_get::<Option<String>, _>("username")? {
+            Some(name) => user::link(ctx.base(), row.try_get("user_id")?, &text::clean(&name)),
+            None => "<i>Compte supprimé</i>".to_owned(),
+        };
+        let place = match target_path(&ctx, &module, module_id).await? {
+            Some(path) => format!("<a href=\"{}#comments\">{}</a>", ctx.url(&path), text::encode(&module)),
+            None => text::encode(&module),
+        };
+        body.push_str(&format!(
+            "<tr><td>{author}</td><td>{place}</td><td>{}</td><td class=\"text-nowrap\">{}</td><td class=\"text-right\">{}</td></tr>",
+            text::shorten(&content, 160),
+            text::date_short(&date),
+            super::admin::delete_button(&ctx, &format!("comments/delete/{id}"), "Supprimer ce commentaire ?"),
+        ));
+    }
+    let content = super::admin::list_card(&ctx, "Derniers commentaires", None, &["Auteur", "Contenu", "Commentaire", "Date", ""], &body);
+    super::admin::render(&ctx, "comments", TITLE, None, content)
 }
 
 #[cfg(test)]
