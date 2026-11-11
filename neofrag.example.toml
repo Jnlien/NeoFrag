@@ -8,6 +8,8 @@ bind = "127.0.0.1:8080"
 base_url = ""
 # true derrière un proxy HTTPS : le cookie de session devient « Secure ».
 https = false
+# Adresse publique du site, sans chemin. Nécessaire pour les liens envoyés par email.
+public_url = ""
 
 [database]
 # Même base MySQL/MariaDB que le site NeoFrag PHP (config/db.php).
@@ -32,3 +34,13 @@ assets_dir = "assets"
 upload_dir = "assets/upload"
 # Taille maximale d'un fichier envoyé (avatar, image d'actualité), en mégaoctets.
 max_upload_mb = 5
+
+# Envoi d'emails (mot de passe oublié, validation d'inscription, contact).
+# Laissez smtp_host vide pour désactiver ces fonctions.
+[email]
+smtp_host = ""
+smtp_port = 587
+smtp_username = ""
+smtp_password = ""
+# "starttls" (port 587), "tls" (port 465) ou "none" (serveur local, non chiffré).
+smtp_security = "starttls"

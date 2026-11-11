@@ -32,6 +32,11 @@ du travail restant.
 | Formulaires | `libraries/form*.php` (partiel) | `src/core/form.rs` |
 | Pays | `helpers/countries.php` | `src/core/countries.rs` |
 | Limitation des tentatives | (absent de l'original) | `src/core/throttle.rs` |
+| Emails (SMTP) | `libraries/email.php`, `config/email.php` | `src/core/mail.rs` |
+| Jetons envoyés par email | `modules/user/models/token.php` | `src/core/token.rs` |
+| Validation d'inscription, mot de passe oublié | `modules/user` (actions `lost_password`) | `src/modules/recovery.rs` |
+| Module Contact | `modules/contact` | `src/modules/contact.rs` |
+| Module Commentaires (public) | `modules/comments` | `src/modules/comments.rs` |
 | Recherche (actualités, pages) | `modules/search` (partiel) | `src/modules/search.rs` |
 | Administration (actualités et catégories avec images, pages, membres, réglages de base) | `modules/admin`, `news`, `pages`, `settings` (partiel) | `src/modules/admin.rs` |
 | Widgets header, navigation, breadcrumb, module, user, members, news, search, html, copyright | `widgets/*` | `src/widgets/` |
@@ -40,15 +45,17 @@ du travail restant.
 
 ### 1. Socle manquant (à faire avant les gros modules)
 
-- **Module Utilisateur, suite** : validation de l'inscription par email (tant qu'elle
-  n'est pas portée, les inscriptions sont fermées si `nf_registration_validation` est
-  activé), mot de passe oublié, captcha, message de bienvenue, image de couverture,
-  messagerie privée, historique des sessions, administration des groupes.
+- **Module Utilisateur, suite** : captcha, message de bienvenue, image de couverture,
+  messagerie privée, historique des sessions, administration des groupes, nouvelle
+  validation quand un membre change d'adresse email.
 - **Envoi de fichiers, suite** : seules les images sont gérées ; les autres types
   (pièces jointes) viendront avec les modules qui en ont besoin. Les avatars GIF animés
   sont figés (ré-encodage).
-- **Emails** (SMTP, `config/email.php`, gabarits) : nécessaire à l'inscription et au contact.
-- **Commentaires** (`modules/comments`, 320 lignes) : utilisés par actualités, galerie, événements.
+- **Commentaires, suite** : administration (`admin/comments`), réponses à un commentaire
+  (jamais terminées dans l'original), commentaires sur les autres modules à mesure
+  qu'ils sont portés.
+- **Jetons** : la table `nf_user_token` n'a pas de date ; les jetons expirés non utilisés
+  y restent (inutilisables) jusqu'à la prochaine validation ou réinitialisation du compte.
 - **Administration des permissions** (`modules/access`, 610 lignes) et accès à
   l'administration par permission de module (aujourd'hui : administrateurs uniquement).
 - **Internationalisation** : les libellés sont en français dans le code, comme dans
@@ -80,7 +87,6 @@ du travail restant.
 | talks | 600 | discussions instantanées |
 | partners | 600 | partenaires |
 | statistics | 260 | graphiques de fréquentation |
-| contact | 120 | formulaire de contact (dépend des emails) |
 | tools | 170 | utilitaires |
 
 ### 3. Widgets restants
@@ -107,8 +113,8 @@ rendu (visibles avec `RUST_LOG=neofrag=debug`).
 ## Ordre conseillé
 
 1. ~~Envoi de fichiers~~ (fait) → 2. ~~Utilisateur : inscription, profil, mot de passe~~ (fait) →
-3. Emails (validation d'inscription, mot de passe oublié, contact) → 4. Commentaires →
-5. Permissions + addons → 6. Équipes / Jeux → 7. Événements → 8. Forum →
+3. ~~Emails (validation d'inscription, mot de passe oublié, contact)~~ (fait) →
+4. ~~Commentaires~~ (fait) → 5. Permissions + addons → 6. Équipes / Jeux → 7. Événements → 8. Forum →
 9. Galerie, Partenaires, Palmarès, Recrutement → 10. Live editor →
 11. Thème d'administration → 12. Internationalisation → 13. OAuth, installation.
 

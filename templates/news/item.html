@@ -11,7 +11,7 @@
 			<a class="btn btn-light btn-sm" href="https://twitter.com/share?url={{ share }}" target="_blank" rel="noopener"><i class="icon fab fa-twitter text-info fa-fw"></i></a>
 		</div>
 		{% endif %}
-		<footer class="blockquote-footer">Par {{ author|safe }} le {{ date }} / <a href="{{ category_url }}">{{ category_title|safe }}</a></footer>
+		<footer class="blockquote-footer">Par {{ author|safe }} le {{ date }} / <a href="{{ category_url }}">{{ category_title|safe }}</a> / <a href="{{ url }}#comments"><i class="icon far fa-comments fa-fw"></i> {{ comments }}</a></footer>
 	</blockquote>
 </div>
 {% if !tags.is_empty() || has_more %}

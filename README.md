@@ -21,9 +21,12 @@ de jeu et associations esport, dont le développement PHP s'est arrêté à l'Al
 | Widgets | `header`, `navigation`, `breadcrumb`, `module`, `user`, `members`, `news`, `search`, `html`, `copyright` |
 | Actualités | Liste paginée, détail, catégories, tags |
 | Pages | Pages statiques avec permission d'accès par page |
-| Membres | Inscription, connexion / déconnexion, espace membre, profil public, liste des membres |
+| Membres | Inscription (avec validation par email si le site l'exige), connexion / déconnexion, mot de passe oublié, espace membre, profil public, liste des membres |
 | Compte | Édition du profil (identité, pays, liens), avatar, identifiant, email, mot de passe |
 | Fichiers | Envoi d'images (`nf_file`, dossier `upload/`) : avatars, images d'actualités et de catégories |
+| Commentaires | Sur les actualités : ajout par les membres, suppression par l'auteur ou un administrateur |
+| Contact | Formulaire envoyé par email à l'adresse du site |
+| Emails | SMTP (`[email]` dans `neofrag.toml`) ; sans configuration, les fonctions concernées sont désactivées |
 | Recherche | Actualités et pages |
 | Administration | Tableau de bord, actualités, catégories, pages, membres (droits, suppression), réglages de base |
 
@@ -57,6 +60,14 @@ mysql neofrag < legacy/DATABASE.sql
 Compte initial : `admin` / `admin123`. **Changez ce mot de passe dès la première
 connexion** (Espace membre → Mon compte), avant toute mise en ligne.
 
+### Emails
+
+Le mot de passe oublié, la validation d'inscription et le formulaire de contact envoient
+des emails. Renseignez la section `[email]` (serveur SMTP) **et** `server.public_url`
+(l'adresse publique du site, utilisée pour les liens). L'expéditeur est l'adresse de
+contact du site (réglage `nf_contact`). Sans cette configuration, ces fonctions sont
+masquées, et les inscriptions sont fermées si le site exige une validation par email.
+
 ### Derrière un reverse proxy
 
 Le serveur écoute en HTTP ; mettez nginx, Caddy ou Apache devant pour le HTTPS, activez
@@ -87,6 +98,9 @@ Chaque fichier indique en tête de quel fichier PHP il est le portage.
 - BBCode : URL `javascript:` / `data:` refusées dans `[url]` et `[img]`.
 - Images envoyées : type vérifié sur le contenu, image ré-encodée (métadonnées
   supprimées), SVG refusés, taille limitée (`site.max_upload_mb`).
+- Liens envoyés par email : ils expirent (2 h pour un mot de passe, 7 jours pour une
+  validation), ne servent qu'une fois, et la base n'en garde qu'une empreinte. La
+  demande de réinitialisation ne révèle pas si une adresse est inscrite.
 - Mots de passe de 8 caractères minimum ; changer de mot de passe déconnecte les autres
   sessions ; modifier l'identifiant ou l'email demande le mot de passe actuel.
 - Tout texte lu en base est ré-encodé avant affichage (une donnée ancienne non encodée

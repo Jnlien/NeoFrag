@@ -205,6 +205,7 @@ struct ItemTemplate {
     tags: Vec<(String, String)>,
     has_more: bool,
     share_url: Option<String>,
+    comments: i64,
 }
 
 #[derive(Template)]
@@ -224,7 +225,8 @@ fn author_html(ctx: &Ctx, news: &News) -> String {
 }
 
 /// Carte d'une actualité. `full` : vue détaillée (texte complet, boutons de partage).
-fn item_html(ctx: &Ctx, news: &News, full: bool) -> Result<String, AppError> {
+async fn item_html(ctx: &Ctx, news: &News, full: bool) -> Result<String, AppError> {
+    let comments = super::comments::count(ctx, "news", news.news_id).await?;
     let introduction = if full && !news.content.is_empty() {
         format!("{}<br /><br />{}", bbcode::render(&news.introduction), bbcode::render(&news.content))
     } else {
@@ -246,6 +248,7 @@ fn item_html(ctx: &Ctx, news: &News, full: bool) -> Result<String, AppError> {
             .collect(),
         has_more: !full && !news.content.is_empty(),
         share_url: full.then(|| urlencoding::encode(&ctx.url(&news.path())).into_owned()),
+        comments,
     }
     .render()?)
 }
@@ -303,7 +306,7 @@ async fn listing(
         ));
     }
     for item in &news {
-        blocks.push(Block::Panel(Panel::new().body_raw(item_html(ctx, item, false)?)));
+        blocks.push(Block::Panel(Panel::new().body_raw(item_html(ctx, item, false).await?)));
     }
     if let Some(panel) = pagination.panel(&ctx.url(base_path)) {
         blocks.push(Block::Panel(panel));
@@ -399,7 +402,7 @@ pub async fn show(
 
     let mut blocks = vec![Block::Html(format!(
         "<div class=\"row\"><div class=\"col-12\">{}</div></div>",
-        Panel::new().body_raw(item_html(&ctx, &news, true)?).render()
+        Panel::new().body_raw(item_html(&ctx, &news, true).await?).render()
     ))];
 
     if let (Some(author_id), Some(username)) = (news.user_id, &news.username) {
@@ -434,6 +437,11 @@ pub async fn show(
             "<div class=\"row\"><div class=\"col-12\">{about}</div></div>"
         )));
     }
+
+    blocks.push(Block::Html(format!(
+        "<div class=\"row\"><div class=\"col-12\">{}</div></div>",
+        super::comments::panel(&ctx, "news", id).await?
+    )));
 
     let page = Page::new("news", TITLE, ICON)
         .method("_news")

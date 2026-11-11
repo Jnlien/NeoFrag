@@ -1,6 +1,8 @@
 //! Helpers de texte portés de `neofrag/helpers/string.php` et `assets.php`.
 
-use chrono::{Datelike, NaiveDateTime};
+use chrono::{Datelike, NaiveDateTime, Timelike};
+use regex::Regex;
+use std::sync::LazyLock;
 
 /// NeoFrag enregistre le texte saisi déjà encodé en entités HTML, puis l'affiche tel quel.
 /// On garde cette convention pour rester compatible avec les données existantes.
@@ -116,6 +118,39 @@ const MONTHS_SHORT: [&str; 12] = [
 ];
 
 /// `timetostr('%e %b %Y', $date)` en français.
+/// Date et heure : « 11 nov. 2026 à 14:05 ».
+pub fn date_time(date: &NaiveDateTime) -> String {
+    format!("{} à {:02}:{:02}", date_short(date), date.hour(), date.minute())
+}
+
+static URL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"https?://[^\s<]+").expect("motif valide"));
+
+/// Rend cliquables les adresses web d'un texte déjà encodé (`strtolink()` de l'original).
+pub fn linkify(encoded: &str) -> String {
+    URL.replace_all(encoded, |caps: &regex::Captures| {
+        let mut url = &caps[0];
+        let mut tail = String::new();
+        // La ponctuation et les guillemets (encodés) qui suivent ne font pas partie de l'adresse.
+        loop {
+            let cut = ["&quot;", "&#039;", "&gt;", "&lt;", ".", ",", ";", ":", "!", "?", ")"]
+                .iter()
+                .find(|suffix| url.ends_with(*suffix));
+            match cut {
+                Some(suffix) => {
+                    url = &url[..url.len() - suffix.len()];
+                    tail.insert_str(0, suffix);
+                }
+                None => break,
+            }
+        }
+        if url.len() <= "https://".len() {
+            return caps[0].to_owned();
+        }
+        format!("<a href=\"{url}\" rel=\"nofollow noopener\" target=\"_blank\">{url}</a>{tail}")
+    })
+    .into_owned()
+}
+
 pub fn date_short(date: &NaiveDateTime) -> String {
     format!(
         "{} {} {}",
@@ -175,6 +210,19 @@ mod tests {
         assert_eq!(clean("G&eacute;n&eacute;ral"), "Général");
         assert_eq!(clean("<b>x</b>"), "&lt;b&gt;x&lt;/b&gt;");
         assert_eq!(clean(&clean("a &amp; <b>")), clean("a &amp; <b>"));
+    }
+
+    #[test]
+    fn links_in_text() {
+        assert_eq!(
+            linkify("voir https://neofr.ag/doc?a=1&amp;b=2, merci"),
+            "voir <a href=\"https://neofr.ag/doc?a=1&amp;b=2\" rel=\"nofollow noopener\" target=\"_blank\">https://neofr.ag/doc?a=1&amp;b=2</a>, merci"
+        );
+        // Guillemet encodé : il ne peut pas fermer l'attribut href.
+        let html = linkify("&quot;http://a.fr/x&quot; onmouseover=&quot;y");
+        assert!(html.contains("href=\"http://a.fr/x\""));
+        assert!(!html.contains("href=\"http://a.fr/x&quot;"));
+        assert_eq!(linkify("pas de lien : javascript:alert(1) ni https://"), "pas de lien : javascript:alert(1) ni https://");
     }
 
     #[test]

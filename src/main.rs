@@ -12,9 +12,9 @@ mod widgets;
 
 use crate::{
     config::Config,
-    core::{ctx::Ctx, layout, session},
+    core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
-    modules::{account, admin, members, news, pages, search, user},
+    modules::{account, admin, comments, contact, members, news, pages, recovery, search, user},
     state::AppState,
 };
 use axum::{
@@ -94,6 +94,12 @@ fn router(state: AppState) -> Router {
         .route("/user/avatar/delete", post(account::avatar_delete))
         .route("/user/account", get(account::account_get).post(account::account_post))
         .route("/user/account/password", post(account::password_post))
+        .route("/user/validation/{token}", get(recovery::validation))
+        .route("/user/lost-password", get(recovery::lost_get).post(recovery::lost_post))
+        .route("/user/lost-password/{token}", get(recovery::reset_get).post(recovery::reset_post))
+        .route("/contact", get(contact::index).post(contact::send))
+        .route("/comments/add", post(comments::add))
+        .route("/comments/delete/{id}", post(comments::delete))
         .route("/user/{id}/{slug}", get(user::profile))
         .route("/search", get(search::index))
         // Administration
@@ -181,8 +187,15 @@ async fn main() -> anyhow::Result<()> {
         .bind
         .parse()
         .map_err(|e| anyhow::anyhow!("server.bind invalide : {e}"))?;
+    let mailer = Mailer::from_config(&config)
+        .map_err(|e| anyhow::anyhow!("configuration [email] invalide : {e}"))?
+        .map(Arc::new);
+    if mailer.is_none() {
+        tracing::info!("envoi d'emails désactivé (mot de passe oublié, validation d'inscription, contact)");
+    }
     let state = AppState {
         db,
+        mailer,
         config: Arc::new(config),
         throttle: Arc::default(),
     };

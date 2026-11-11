@@ -2,10 +2,13 @@
 //! Porté de `modules/user` (formulaires `username`, `email`, `new_password`, `profile`,
 //! `profile_socials`, `avatar`, et action `register`).
 //!
-//! Restent à porter : validation de l'inscription par email, mot de passe oublié,
-//! captcha, message de bienvenue, image de couverture (voir ROADMAP).
+//! Validation par email et mot de passe oublié : voir `recovery.rs`.
+//! Restent à porter : captcha, message de bienvenue, image de couverture (voir ROADMAP).
 
-use super::user::{valid_handle, ICON, SOCIALS, TITLE};
+use super::{
+    recovery,
+    user::{valid_handle, ICON, SOCIALS, TITLE},
+};
 use crate::{
     core::{
         bbcode, countries,
@@ -13,6 +16,7 @@ use crate::{
         files::{self, Fit},
         form,
         layout::{self, Page},
+        mail,
         panel::{Block, Panel},
         password, session, text, throttle,
     },
@@ -39,10 +43,10 @@ const HOUR: Duration = Duration::from_secs(3600);
 const SESSION_EXPIRED: &str = "Votre session a expiré, veuillez réessayer.";
 
 /// Les inscriptions sont-elles ouvertes ? Fermées aussi quand le site exige une
-/// validation par email, tant que l'envoi d'emails n'est pas porté : créer des comptes
+/// validation par email sans que l'envoi d'emails soit configuré : créer des comptes
 /// non validés contournerait le réglage de l'administrateur.
 pub fn registration_open(ctx: &Ctx) -> bool {
-    ctx.settings.bool("nf_registration_status") && !ctx.settings.bool("nf_registration_validation")
+    ctx.settings.bool("nf_registration_status") && (!recovery::validation_required(ctx) || mail::enabled(ctx))
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +67,7 @@ fn validate_username(username: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn validate_email(email: &str) -> Result<(), &'static str> {
+pub fn validate_email(email: &str) -> Result<(), &'static str> {
     const INVALID: &str = "Adresse email invalide.";
     let forbidden = |c: char| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '"' | '\'' | '&' | ',' | ';');
     if email.len() > 100 || email.chars().any(forbidden) {
@@ -82,7 +86,7 @@ fn validate_email(email: &str) -> Result<(), &'static str> {
     }
 }
 
-fn validate_new_password(password: &str, confirm: &str) -> Result<(), &'static str> {
+pub fn validate_new_password(password: &str, confirm: &str) -> Result<(), &'static str> {
     if password.chars().count() < MIN_PASSWORD {
         return Err("Le mot de passe doit faire au moins 8 caractères.");
     }
@@ -274,8 +278,28 @@ pub async fn register_post(Extension(ctx): Ctxt, Form(mut form): Form<RegisterFo
         .execute(&ctx.state.db)
         .await?;
     throttle::hit(&ctx.state, &throttle_key, HOUR);
+    let user_id = created.last_insert_id() as u32;
 
-    let cookie = session::login(&ctx, created.last_insert_id() as u32, false).await?;
+    if recovery::validation_required(&ctx) {
+        if !recovery::send_validation(&ctx, user_id, &form.username, &form.email).await? {
+            // Sans cet email le compte serait inutilisable : on l'annule pour permettre un nouvel essai.
+            sqlx::query("DELETE FROM nf_user WHERE id = ?")
+                .bind(user_id)
+                .execute(&ctx.state.db)
+                .await?;
+            return register_page(&ctx, &form, Some("Une erreur s'est produite lors de l'envoi du message")).await;
+        }
+        return recovery::notice_page(
+            &ctx,
+            "Créer un compte",
+            "fas fa-sign-in-alt",
+            "user/register",
+            "Votre compte a été créé. Un email vient de vous être envoyé : cliquez sur le lien qu'il contient pour valider votre inscription.",
+        )
+        .await;
+    }
+
+    let cookie = session::login(&ctx, user_id, false).await?;
     Ok(([(header::SET_COOKIE, cookie.to_string())], Redirect::to(&ctx.url("user/edit?ok=welcome"))).into_response())
 }
 
@@ -733,6 +757,7 @@ pub async fn account_get(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> 
     let values = load_account(&ctx, current.id).await?;
     let notice = match notice.ok.as_deref() {
         Some("password") => Some("Mot de passe modifié. Vos autres sessions ont été déconnectées."),
+        Some("reset") => Some("Nouveau mot de passe enregistré"),
         Some(_) => Some("Modifications enregistrées."),
         None => None,
     };

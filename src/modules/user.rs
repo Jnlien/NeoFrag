@@ -1,11 +1,13 @@
 //! Module Utilisateur : connexion, déconnexion, espace membre et profils publics.
 //! Porté de `modules/user`. Inscription et édition du compte : voir `account.rs`.
 
+use super::recovery;
 use crate::{
     core::{
         countries,
         ctx::Ctx,
         layout::{self, Page},
+        mail,
         panel::{Block, Panel},
         password, session, text, throttle, user,
     },
@@ -34,6 +36,13 @@ pub fn login_form(ctx: &Ctx, error: Option<&str>) -> String {
         Some(message) => format!("<div class=\"alert alert-danger\">{message}</div>"),
         None => String::new(),
     };
+    let mut links = String::new();
+    if super::account::registration_open(ctx) {
+        links.push_str(&format!(" <a class=\"btn btn-link\" href=\"{}\">Créer un compte</a>", ctx.url("user/register")));
+    }
+    if mail::enabled(ctx) {
+        links.push_str(&format!(" <a class=\"btn btn-link\" href=\"{}\">Mot de passe oublié ?</a>", ctx.url("user/lost-password")));
+    }
     format!(
         "{alert}<form method=\"post\" action=\"{action}\">\
          <input type=\"hidden\" name=\"csrf\" value=\"{csrf}\" />\
@@ -44,11 +53,7 @@ pub fn login_form(ctx: &Ctx, error: Option<&str>) -> String {
          <button type=\"submit\" class=\"btn btn-primary\">Se connecter</button>{register}</form>",
         action = ctx.url("user/login"),
         csrf = ctx.csrf_token(),
-        register = if super::account::registration_open(ctx) {
-            format!(" <a class=\"btn btn-link\" href=\"{}\">Créer un compte</a>", ctx.url("user/register"))
-        } else {
-            String::new()
-        },
+        register = links,
     )
 }
 
@@ -98,7 +103,9 @@ pub async fn login_post(
     }
 
     let row = sqlx::query(
-        "SELECT id, password, salt FROM nf_user WHERE deleted = '0' AND (username = ? OR email = ?) LIMIT 1",
+        "SELECT id, password, salt, username, IFNULL(email, '') AS email, \
+                (admin = '0' AND last_activity_date IS NULL) AS never_active \
+         FROM nf_user WHERE deleted = '0' AND (username = ? OR email = ?) LIMIT 1",
     )
     // Les pseudos sont stockés encodés en entités (convention NeoFrag), pas les emails.
     .bind(text::encode(form.login.trim()))
@@ -132,6 +139,20 @@ pub async fn login_post(
             .bind(user_id)
             .execute(&state.db)
             .await?;
+    }
+
+    // Inscription à valider par email (même critère que l'original : aucune activité).
+    if let Some(row) = &row {
+        if recovery::validation_required(&ctx) && row.try_get::<i64, _>("never_active")? != 0 {
+            let username = text::decode(&row.try_get::<String, _>("username")?);
+            let email: String = row.try_get("email")?;
+            recovery::resend_validation(&ctx, user_id, &username, &email).await?;
+            return login_page(
+                &ctx,
+                Some("Vous devez valider votre inscription : cliquez sur le lien reçu par email. Un nouveau message vous est envoyé si besoin."),
+            )
+            .await;
+        }
     }
 
     let cookie = session::login(&ctx, user_id, form.remember.as_deref() == Some("on")).await?;

@@ -14,6 +14,33 @@ pub struct Config {
     pub security: Security,
     #[serde(default)]
     pub site: Site,
+    #[serde(default)]
+    pub email: Email,
+}
+
+/// Envoi d'emails par SMTP (remplace `config/email.php`). Sans `smtp_host` ou sans
+/// `server.public_url`, les fonctions qui envoient des emails sont désactivées.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Email {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    /// `starttls` (port 587), `tls` (port 465) ou `none` (serveur local uniquement).
+    pub smtp_security: String,
+}
+
+impl Default for Email {
+    fn default() -> Self {
+        Self {
+            smtp_host: String::new(),
+            smtp_port: 587,
+            smtp_username: String::new(),
+            smtp_password: String::new(),
+            smtp_security: "starttls".to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -25,6 +52,10 @@ pub struct Server {
     pub base_url: String,
     /// À activer derrière un reverse proxy HTTPS : cookies `Secure`.
     pub https: bool,
+    /// Adresse publique du site, sans chemin (`https://exemple.fr`). Sert à écrire les
+    /// liens dans les emails : elle n'est jamais déduite de la requête, qu'un
+    /// visiteur peut falsifier.
+    pub public_url: String,
 }
 
 impl Default for Server {
@@ -33,6 +64,7 @@ impl Default for Server {
             bind: "127.0.0.1:8080".to_owned(),
             base_url: String::new(),
             https: false,
+            public_url: String::new(),
         }
     }
 }
@@ -92,6 +124,14 @@ impl Config {
         config.server.base_url = config.server.base_url.trim_end_matches('/').to_owned();
         if !config.server.base_url.is_empty() && !config.server.base_url.starts_with('/') {
             anyhow::bail!("server.base_url doit commencer par '/' (ou être vide)");
+        }
+        config.server.public_url = config.server.public_url.trim_end_matches('/').to_owned();
+        let public_url = &config.server.public_url;
+        if !public_url.is_empty() && !(public_url.starts_with("https://") || public_url.starts_with("http://")) {
+            anyhow::bail!("server.public_url doit commencer par https:// (ou http://)");
+        }
+        if !matches!(config.email.smtp_security.as_str(), "starttls" | "tls" | "none") {
+            anyhow::bail!("email.smtp_security doit valoir \"starttls\", \"tls\" ou \"none\"");
         }
         if config.security.secret_key.len() < 32 {
             anyhow::bail!("security.secret_key doit faire au moins 32 caractères");
