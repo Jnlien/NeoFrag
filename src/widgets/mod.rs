@@ -5,6 +5,7 @@
 //! encore porté) ne produit rien : la page reste utilisable.
 
 pub mod breadcrumb;
+pub mod extras;
 pub mod members;
 pub mod navigation;
 pub mod news;
@@ -33,7 +34,7 @@ pub async fn render(
     settings: &Value,
 ) -> Result<Option<Vec<Block>>, AppError> {
     // Un widget rattaché à un module désactivé ne s'affiche pas.
-    if !ctx.enabled(name) {
+    if !ctx.widget_enabled(name) {
         return Ok(None);
     }
     let blocks = match (name, kind) {
@@ -65,6 +66,9 @@ pub async fn render(
         ("partners", "column") => modules::partners::widget(ctx, settings, true).await?,
         ("partners", _) => modules::partners::widget(ctx, settings, false).await?,
         ("awards", _) => modules::awards::widget(ctx).await?,
+        ("about", _) => extras::about(ctx, settings).await?,
+        ("socials", _) => extras::socials(ctx, settings),
+        ("slider", _) => extras::slider(ctx),
         ("recruits", _) => modules::recruits::widget(ctx).await?,
         ("talks", _) => modules::talks::widget(ctx, settings).await?,
         ("events", kind) => modules::events::widget(ctx, kind).await?,

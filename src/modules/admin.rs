@@ -45,7 +45,11 @@ const MENU: &[(&str, &str, &str, &str, &str)] = &[
     ("partners", "admin/partners", "far fa-handshake", "Partenaires", "partners"),
     ("talks", "admin/talks", "far fa-comment-dots", "Discussions", "talks"),
     ("user", "admin/user", "fas fa-users", "Membres", ""),
+    ("access", "admin/access", "fas fa-unlock-alt", "Permissions", ""),
+    ("live_editor", "admin/live-editor", "fas fa-desktop", "Live Editor", ""),
     ("addons", "admin/addons", "fas fa-puzzle-piece", "Modules", ""),
+    ("statistics", "admin/statistics", "fas fa-chart-pie", "Statistiques", ""),
+    ("monitoring", "admin/monitoring", "fas fa-heartbeat", "Supervision", ""),
     ("settings", "admin/settings", "fas fa-cogs", "Paramètres", ""),
 ];
 
@@ -1110,8 +1114,11 @@ pub async fn users(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> Reply 
         ));
     }
     let content = format!(
-        "<div class=\"card\"><table class=\"table table-hover mb-0\"><thead><tr><th>#</th><th>Pseudo</th><th>Email</th>\
-         <th>Groupe</th><th>Inscription</th><th>Dernière activité</th><th></th></tr></thead><tbody>{body}</tbody></table></div>"
+        "<p><a class=\"btn btn-outline-secondary\" href=\"{}\">{} Gérer les groupes</a></p>\
+         <div class=\"card\"><table class=\"table table-hover mb-0\"><thead><tr><th>#</th><th>Pseudo</th><th>Email</th>\
+         <th>Groupe</th><th>Inscription</th><th>Dernière activité</th><th></th></tr></thead><tbody>{body}</tbody></table></div>",
+        ctx.url("admin/user/groups"),
+        text::icon("fas fa-users"),
     );
     render(&ctx, "user", "Membres", notice.message(), content)
 }

@@ -38,6 +38,11 @@ impl Ctx {
     }
 
     /// URL interne, équivalent du helper `url()`.
+    /// Le widget est-il activé (lui-même, et le module du même nom s'il existe) ?
+    pub fn widget_enabled(&self, widget: &str) -> bool {
+        self.enabled(widget) && !self.disabled.iter().any(|name| name.strip_prefix("widget:") == Some(widget))
+    }
+
     pub fn url(&self, path: &str) -> String {
         text::url(self.base(), path)
     }

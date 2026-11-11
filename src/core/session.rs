@@ -182,8 +182,8 @@ pub async fn middleware(
     // Modules désactivés : `nf_addon.data` est un tableau PHP sérialisé (`enabled`).
     let mut disabled = Vec::new();
     let addons = sqlx::query(
-        "SELECT a.name, IFNULL(a.data, '') AS data FROM nf_addon a \
-         INNER JOIN nf_addon_type t ON t.id = a.type_id AND t.name = 'module'",
+        "SELECT a.name, t.name AS kind, IFNULL(a.data, '') AS data FROM nf_addon a \
+         INNER JOIN nf_addon_type t ON t.id = a.type_id AND t.name IN ('module', 'widget')",
     )
     .fetch_all(&state.db)
     .await?;
@@ -194,7 +194,9 @@ pub async fn middleware(
             .and_then(|value| value.get("enabled").map(super::php::Value::truthy))
             .unwrap_or(true);
         if !enabled {
-            disabled.push(row.try_get("name")?);
+            let name: String = row.try_get("name")?;
+            // Les widgets désactivés sont notés `widget:<nom>`.
+            disabled.push(if row.try_get::<String, _>("kind")? == "widget" { format!("widget:{name}") } else { name });
         }
     }
 

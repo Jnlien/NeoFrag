@@ -63,7 +63,7 @@ impl Offer {
 
     /// Peut-on encore postuler ?
     fn open(&self, today: NaiveDate) -> bool {
-        !self.closed && self.date_end.is_none_or(|end| end >= today) && (self.size <= 0 || self.accepted < self.size)
+        !self.closed && !matches!(self.date_end, Some(end) if end < today) && (self.size <= 0 || self.accepted < self.size)
     }
 
     fn status_badge(&self, today: NaiveDate) -> &'static str {

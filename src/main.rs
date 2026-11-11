@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, recruits, search, talks, teams, user,
+        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, recruits, search, system, talks, teams, user,
     },
     state::AppState,
 };
@@ -217,6 +217,18 @@ fn router(state: AppState) -> Router {
         .route("/admin/talks/add", get(talks::admin_add_get).post(talks::admin_add_post))
         .route("/admin/talks/delete/{id}", post(talks::admin_delete))
         .route("/admin/talks/{id}/{slug}", get(talks::admin_edit_get).post(talks::admin_edit_post))
+        .route("/admin/addons", get(system::addons))
+        .route("/admin/addons/toggle/{id}", post(system::addon_toggle))
+        .route("/admin/access", get(system::access_index))
+        .route("/admin/access/{module}/{id}", get(system::access_edit).post(system::access_save))
+        .route("/admin/statistics", get(system::statistics))
+        .route("/admin/monitoring", get(system::monitoring))
+        .route("/admin/user/groups", get(system::groups_list))
+        .route("/admin/user/groups/add", get(system::group_add_get).post(system::group_add_post))
+        .route("/admin/user/groups/delete/{id}", post(system::group_delete))
+        .route("/admin/user/groups/{id}", get(system::group_edit_get).post(system::group_edit_post))
+        .route("/admin/user/groups/{id}/members/add", post(system::group_member_add))
+        .route("/admin/user/groups/{id}/members/delete/{user_id}", post(system::group_member_delete))
         .route("/admin/user", get(admin::users))
         .route("/admin/user/role/{id}", post(admin::user_role))
         .route("/admin/user/delete/{id}", post(admin::user_delete))
