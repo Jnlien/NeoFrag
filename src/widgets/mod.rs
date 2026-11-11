@@ -60,6 +60,7 @@ pub async fn render(
         ("news", "tags") => news::tags(ctx).await?,
         ("news", "index") => news::index(ctx).await?,
         ("forum", kind) => modules::forum::widget(ctx, kind).await?,
+        ("gallery", kind) => modules::gallery::widget(ctx, kind).await?,
         ("teams", _) => modules::teams::widget(ctx).await?,
         ("partners", "column") => modules::partners::widget(ctx, settings, true).await?,
         ("partners", _) => modules::partners::widget(ctx, settings, false).await?,

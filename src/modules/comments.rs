@@ -38,6 +38,7 @@ async fn target_path(ctx: &Ctx, module: &str, module_id: u32) -> Result<Option<S
             .await?
             .map(|item| item.path()),
         "events" if ctx.enabled("events") => super::events::find_visible(ctx, module_id).await?.map(|event| event.path()),
+        "gallery" if ctx.enabled("gallery") => super::gallery::find_visible_image_path(ctx, module_id).await?,
         _ => None,
     })
 }

@@ -15,6 +15,7 @@ use sqlx::Row;
 use std::{collections::HashMap, io::Cursor, path::PathBuf};
 
 /// Un fichier reçu dans un formulaire.
+#[derive(Clone)]
 pub struct Upload {
     pub name: String,
     pub bytes: Vec<u8>,
@@ -24,7 +25,7 @@ pub struct Upload {
 #[derive(Default)]
 pub struct FormData {
     fields: HashMap<String, String>,
-    files: HashMap<String, Upload>,
+    files: Vec<(String, Upload)>,
 }
 
 impl FormData {
@@ -37,7 +38,15 @@ impl FormData {
     }
 
     pub fn take_file(&mut self, name: &str) -> Option<Upload> {
-        self.files.remove(name)
+        let index = self.files.iter().position(|(field, _)| field == name)?;
+        Some(self.files.remove(index).1)
+    }
+
+    /// Tous les fichiers d'un champ `multiple`.
+    pub fn take_files(&mut self, name: &str) -> Vec<Upload> {
+        let (taken, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.files).into_iter().partition(|(field, _)| field == name);
+        self.files = kept;
+        taken.into_iter().map(|(_, upload)| upload).collect()
     }
 }
 
@@ -55,7 +64,7 @@ pub async fn read_multipart(mut multipart: Multipart) -> Result<FormData, &'stat
                 let bytes = field.bytes().await.map_err(|_| TOO_BIG)?;
                 // Champ fichier laissé vide par le navigateur.
                 if !bytes.is_empty() {
-                    data.files.insert(name, Upload { name: file_name, bytes: bytes.to_vec() });
+                    data.files.push((name, Upload { name: file_name, bytes: bytes.to_vec() }));
                 }
             }
             None => {

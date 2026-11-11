@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, forum, games, members, news, pages, partners, recovery, search, teams, user,
+        account, admin, awards, comments, contact, events, forum, gallery, games, members, news, pages, partners, recovery, search, teams, user,
     },
     state::AppState,
 };
@@ -120,6 +120,8 @@ fn router(state: AppState) -> Router {
         .route("/forum/message/delete/{id}", post(forum::delete_message))
         .route("/forum/moderate/{action}/{id}", post(forum::moderate))
         .route("/forum/{*rest}", get(forum::route))
+        .route("/gallery", get(gallery::index))
+        .route("/gallery/{*rest}", get(gallery::route))
         .route("/comments/add", post(comments::add))
         .route("/comments/delete/{id}", post(comments::delete))
         .route("/user/{id}/{slug}", get(user::profile))
@@ -183,6 +185,20 @@ fn router(state: AppState) -> Router {
         .route("/admin/forum/categories/add", post(forum::admin_category_add))
         .route("/admin/forum/categories/delete/{id}", post(forum::admin_category_delete))
         .route("/admin/forum/{id}/{slug}", get(forum::admin_edit_get).post(forum::admin_edit_post))
+        .route("/admin/gallery", get(gallery::admin_list))
+        .route("/admin/gallery/add", get(gallery::admin_add_get).post(gallery::admin_add_post))
+        .route("/admin/gallery/delete/{id}", post(gallery::admin_delete))
+        .route("/admin/gallery/categories/add", post(gallery::admin_category_add))
+        .route("/admin/gallery/categories/delete/{id}", post(gallery::admin_category_delete))
+        .route("/admin/gallery/images/delete/{id}", post(gallery::admin_image_delete))
+        .route("/admin/gallery/{id}/{name}", get(gallery::admin_edit_get).post(gallery::admin_edit_post))
+        .route(
+            "/admin/gallery/{id}/images/add",
+            // Plusieurs images par envoi : limite de corps élargie pour cette route.
+            post(gallery::admin_images_add).layer(DefaultBodyLimit::max(
+                state.config.site.max_upload_mb.saturating_mul(1024 * 1024).saturating_mul(gallery::MAX_IMAGES_PER_UPLOAD),
+            )),
+        )
         .route("/admin/user", get(admin::users))
         .route("/admin/user/role/{id}", post(admin::user_role))
         .route("/admin/user/delete/{id}", post(admin::user_delete))
