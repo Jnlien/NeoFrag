@@ -35,11 +35,11 @@ de jeu et associations esport, dont le développement PHP s'est arrêté à l'Al
 | Commentaires | Sur les actualités, les événements et la galerie |
 | Contact | Formulaire envoyé par email à l'adresse du site |
 | Emails | SMTP (`[email]` dans `neofrag.toml`) ; sans configuration, les fonctions concernées sont désactivées |
-| Recherche | Actualités et pages |
+| Recherche | Actualités, pages, sujets du forum, membres |
 | Administration | Tous les modules ci-dessus, membres et groupes, permissions, Live Editor (zones et widgets), activation des modules et widgets, paramètres, mode maintenance, statistiques, supervision |
 
 Ce qui manque encore par rapport à l'original (langues, connexion Steam / Discord…,
-assistant d'installation, écarts module par module) est détaillé dans
+écarts module par module) est détaillé dans
 [ROADMAP.md](ROADMAP.md).
 
 ## Installation
@@ -64,13 +64,16 @@ Le binaire a besoin du dossier `assets/` (ou de celui indiqué par `site.assets_
 
 ### Installation neuve
 
-```bash
-mysql -e "CREATE DATABASE neofrag CHARACTER SET utf8mb4"
-mysql neofrag < legacy/DATABASE.sql
-```
+1. Créez une base MySQL / MariaDB vide (`CREATE DATABASE neofrag CHARACTER SET utf8mb4;`).
+2. Générez les deux secrets et recopiez-les dans `neofrag.toml`, avec l'URL de la base :
+   `neofrag secrets`
+3. Lancez l'installation : `neofrag install` crée le schéma, puis demande le nom du site
+   et le compte administrateur. Elle refuse de toucher à une base qui contient déjà des
+   tables NeoFrag.
+4. Lancez le serveur : `neofrag`.
 
-Compte initial : `admin` / `admin123`. **Changez ce mot de passe dès la première
-connexion** (Espace membre → Mon compte), avant toute mise en ligne.
+Pour une installation automatisée, les réponses peuvent venir de l'environnement :
+`NEOFRAG_SITE_NAME`, `NEOFRAG_ADMIN_USER`, `NEOFRAG_ADMIN_EMAIL`, `NEOFRAG_ADMIN_PASSWORD`.
 
 ### Emails
 

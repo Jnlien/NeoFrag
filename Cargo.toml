@@ -20,6 +20,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 md-5 = "0.10"
 rand = "0.8"
 regex = "1"
+rpassword = "7"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 time = "0.3"

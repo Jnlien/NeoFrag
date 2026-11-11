@@ -6,6 +6,7 @@
 mod config;
 mod core;
 mod error;
+mod install;
 mod modules;
 mod state;
 mod widgets;
@@ -276,19 +277,41 @@ async fn shutdown_signal() {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
+    // Message lisible plutôt qu'une trace d'exécution.
+    if let Err(error) = run().await {
+        eprintln!("Erreur : {error:#}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "neofrag=info,tower_http=info".into()),
         )
         .init();
 
-    let config_path = std::env::args()
-        .nth(1)
+    // `neofrag [config]`, `neofrag install [config]` ou `neofrag secrets`.
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let command = match args.first().map(String::as_str) {
+        Some("install") | Some("secrets") => Some(args.remove(0)),
+        _ => None,
+    };
+    if command.as_deref() == Some("secrets") {
+        install::print_secrets();
+        return Ok(());
+    }
+    let config_path = args
+        .into_iter()
+        .next()
         .or_else(|| std::env::var("NEOFRAG_CONFIG").ok())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("neofrag.toml"));
     let config = Config::load(&config_path)?;
+    if command.as_deref() == Some("install") {
+        return install::run(&config).await;
+    }
 
     // Fuseau du serveur de base de données (et non UTC forcé) : les dates s'affichent
     // comme dans l'installation PHP d'origine.
@@ -304,7 +327,7 @@ async fn main() -> anyhow::Result<()> {
         .fetch_optional(&db)
         .await
         .map_err(|e| {
-            anyhow::anyhow!("la base ne contient pas le schéma NeoFrag (importez legacy/DATABASE.sql) : {e}")
+            anyhow::anyhow!("la base ne contient pas le schéma NeoFrag (base vide : lancez `neofrag install`) : {e}")
         })?;
 
     let bind: SocketAddr = config

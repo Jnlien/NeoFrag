@@ -52,7 +52,7 @@ pub fn registration_open(ctx: &Ctx) -> bool {
 // ---------------------------------------------------------------------------
 // Validation
 
-fn validate_username(username: &str) -> Result<(), &'static str> {
+pub fn validate_username(username: &str) -> Result<(), &'static str> {
     let length = username.chars().count();
     if !(3..=30).contains(&length) {
         return Err("L'identifiant doit faire entre 3 et 30 caractères.");

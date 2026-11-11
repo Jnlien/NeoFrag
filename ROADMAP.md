@@ -16,16 +16,16 @@ tourné sur un vrai site.
 | pages | `modules/pages.rs`, `admin.rs` | — |
 | members | `modules/members.rs` | — |
 | user | `user.rs`, `account.rs`, `recovery.rs`, `messages.rs`, `system.rs` (groupes) | pas de captcha, de message de bienvenue, d'image de couverture ni d'historique des sessions ; pas de nouvelle validation quand un membre change d'email |
-| comments | `modules/comments.rs` | pas d'écran d'administration dédié (suppression depuis la page) ; pas de réponses imbriquées (inachevées dans l'original) |
+| comments | `modules/comments.rs` | pas de réponses imbriquées (inachevées dans l'original) |
 | contact | `modules/contact.rs` | — |
-| search | `modules/search.rs` | actualités et pages seulement (pas le forum ni les membres) |
+| search | `modules/search.rs` | actualités, pages, sujets du forum et membres (pas les autres modules) |
 | forum | `modules/forum.rs` | pas de sondages ni de suivi de sujet par email |
 | events | `modules/events.rs` | pas d'alerte par message privé |
 | teams, games, awards, partners | fichiers du même nom | — |
 | gallery | `modules/gallery.rs` | — |
 | recruits | `modules/recruits.rs` | étude des candidatures réservée aux administrateurs ; pas d'alerte par message privé |
-| talks | `modules/talks.rs` | pas de rafraîchissement automatique (la page se recharge à l'envoi) |
-| access | `modules/system.rs` | réglage par groupe ; pas de règle par membre (les règles existantes sont conservées) |
+| talks | `modules/talks.rs` | messages rafraîchis toutes les 10 s ; l'envoi recharge la page |
+| access | `modules/system.rs` | réglage par groupe ; pas de règle par membre (les règles existantes sont conservées) ; l'administration se délègue module par module, pas action par action |
 | addons | `modules/system.rs` | activation / désactivation des modules et widgets ; pas d'installation par archive, ni thèmes, langues, authentificateurs |
 | settings | `modules/settings.rs` | pas de couleurs / fond du thème, captcha, Analytics, authentification HTTP |
 | statistics | `modules/system.rs` | tableau mensuel sur 12 mois au lieu des graphiques Highcharts |
@@ -44,24 +44,22 @@ Par ordre d'importance pour une mise en production.
 
 1. **Essai sur une vraie base NeoFrag** : tout a été testé contre le schéma d'origine avec
    des données de test, pas contre un site ayant des années de contenu.
-2. **Accès à l'administration par permission** : aujourd'hui réservé aux administrateurs
-   (`nf_user.admin`). L'original permet d'ouvrir un module d'administration à un groupe.
-3. **Internationalisation** : les libellés sont en français dans le code. Restent le
+2. **Internationalisation** : les libellés sont en français dans le code. Restent le
    mécanisme `lang()`, les fichiers `langs/*.php` (en, de, es, it, pt), le choix de langue
    par visiteur et la saisie des contenus dans plusieurs langues.
-4. **Authentification externe** (`addons/authenticator_*` : Steam, Discord, Twitch, Google,
+3. **Authentification externe** (`addons/authenticator_*` : Steam, Discord, Twitch, Google,
    GitHub, Battle.net…) via OAuth.
-5. **Assistant d'installation** (`install/`) et **mises à jour de schéma** pour les bases
-   antérieures à 0.2.3. Aujourd'hui : import de `legacy/DATABASE.sql` à la main.
-6. **Couleurs du thème** : `style.css` est la version compilée par défaut ; l'original
+4. **Mises à jour de schéma** pour les bases antérieures à 0.2.3 (l'installation neuve
+   se fait avec `neofrag install`).
+5. **Couleurs du thème** : `style.css` est la version compilée par défaut ; l'original
    recompile le SCSS avec les couleurs choisies (`azuro_*`). Thème `default` et thèmes tiers.
-7. **Confort d'administration** : éditeur BBCode, tableaux triables, glisser-déposer du
+6. **Confort d'administration** : éditeur BBCode, tableaux triables, glisser-déposer du
    Live Editor, graphiques des statistiques.
-8. **Écarts de module** listés dans le tableau ci-dessus (sondages du forum, captcha,
-   alertes par message privé, recherche étendue, pièces jointes autres que des images…).
-9. **Mots de passe** : phpass (MD5 itéré) est conservé car `nf_user.password` fait 34
+7. **Écarts de module** listés dans le tableau ci-dessus (sondages du forum, captcha,
+   alertes par message privé, pièces jointes autres que des images…).
+8. **Mots de passe** : phpass (MD5 itéré) est conservé car `nf_user.password` fait 34
    caractères. Proposer une migration optionnelle vers Argon2id (au prix de la
    compatibilité avec le site PHP).
-10. **Divers** : les anciennes données encodent les accents en entités (`&eacute;`), la
+9. **Divers** : les anciennes données encodent les accents en entités (`&eacute;`), la
     recherche ne les retrouve pas par leur forme accentuée ; les jetons expirés restent
     dans `nf_user_token` jusqu'à la prochaine demande ; les avatars GIF animés sont figés.
