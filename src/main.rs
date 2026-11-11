@@ -287,6 +287,8 @@ async fn main() {
 
 async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
+        // Couleurs seulement dans un terminal : pas de codes parasites dans les journaux.
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stdout()))
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "neofrag=info,tower_http=info".into()),
         )
@@ -312,6 +314,8 @@ async fn run() -> anyhow::Result<()> {
     if command.as_deref() == Some("install") {
         return install::run(&config).await;
     }
+    // Base vide : le schéma et le compte administrateur sont créés au premier démarrage.
+    install::auto(&config, &config_path).await?;
 
     // Fuseau du serveur de base de données (et non UTC forcé) : les dates s'affichent
     // comme dans l'installation PHP d'origine.

@@ -1,0 +1,37 @@
+# NeoFrag + MariaDB. Lancement :  docker compose up -d   puis   docker compose logs neofrag
+# (le mot de passe administrateur initial s'affiche dans les logs et dans ./data).
+# Changez les deux mots de passe « changez-moi » avant le premier lancement.
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: neofrag
+      MARIADB_USER: neofrag
+      MARIADB_PASSWORD: changez-moi
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - ./db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20
+
+  neofrag:
+    image: debian:bookworm-slim
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    working_dir: /app
+    command: ["/app/neofrag", "/data/neofrag.toml"]
+    environment:
+      NEOFRAG_DATABASE_URL: mysql://neofrag:changez-moi@db:3306/neofrag
+      NEOFRAG_PORT: "8080"
+      # NEOFRAG_PUBLIC_URL: https://monsite.fr
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./neofrag:/app/neofrag:ro
+      - ./assets:/app/assets
+      - ./data:/data

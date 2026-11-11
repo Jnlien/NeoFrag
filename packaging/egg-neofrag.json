@@ -1,0 +1,82 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-11-11T18:00:00+01:00",
+    "name": "NeoFrag",
+    "author": "neofrag@example.com",
+    "description": "NeoFrag (réécriture Rust) : CMS pour équipes de jeu et associations esport. Nécessite une base MySQL/MariaDB.",
+    "features": null,
+    "docker_images": {
+        "Debian": "ghcr.io/parkervcp/yolks:debian"
+    },
+    "file_denylist": [],
+    "startup": "./neofrag",
+    "config": {
+        "files": "{}",
+        "startup": "{\"done\": \"NeoFrag \\u00e0 l'\\u00e9coute\"}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# Télécharge la dernière version publiée ; sans publication, les fichiers s'envoient à la main.\nmkdir -p /mnt/server && cd /mnt/server || exit 1\napt-get update -qq && apt-get install -y -qq curl ca-certificates tar >/dev/null 2>&1\nURL=\"https://github.com/Jnlien/NeoFrag/releases/latest/download/neofrag-linux-x86_64.tar.gz\"\nif curl -fsSL -o neofrag.tar.gz \"$URL\"; then\n    tar -xzf neofrag.tar.gz --strip-components=1 && rm -f neofrag.tar.gz\n    chmod +x neofrag start.sh\n    echo \"NeoFrag installé.\"\nelse\n    echo \"Aucune version publiée à télécharger : envoyez neofrag-linux-x86_64.tar.gz dans le gestionnaire de fichiers puis décompressez-le.\"\nfi\nexit 0\n",
+            "container": "ghcr.io/parkervcp/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Adresse de la base",
+            "description": "Base MySQL/MariaDB : mysql://utilisateur:motdepasse@hote:3306/base (onglet Databases du serveur).",
+            "env_variable": "NEOFRAG_DATABASE_URL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:300",
+            "field_type": "text"
+        },
+        {
+            "name": "Adresse publique du site",
+            "description": "Ex. https://monsite.fr. Sert aux liens envoyés par email. Peut rester vide.",
+            "env_variable": "NEOFRAG_PUBLIC_URL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:200",
+            "field_type": "text"
+        },
+        {
+            "name": "Nom du site",
+            "description": "Utilisé à la première installation seulement.",
+            "env_variable": "NEOFRAG_SITE_NAME",
+            "default_value": "Mon site NeoFrag",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:100",
+            "field_type": "text"
+        },
+        {
+            "name": "Identifiant administrateur",
+            "description": "Utilisé à la première installation seulement. Le mot de passe s'affiche dans la console au premier démarrage.",
+            "env_variable": "NEOFRAG_ADMIN_USER",
+            "default_value": "admin",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:30",
+            "field_type": "text"
+        },
+        {
+            "name": "Email administrateur",
+            "description": "Utilisé à la première installation seulement.",
+            "env_variable": "NEOFRAG_ADMIN_EMAIL",
+            "default_value": "admin@example.com",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:100",
+            "field_type": "text"
+        }
+    ]
+}

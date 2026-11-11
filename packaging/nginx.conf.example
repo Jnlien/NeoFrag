@@ -1,0 +1,16 @@
+# Reverse proxy nginx pour NeoFrag. Remplacez monsite.fr, puis obtenez le certificat
+# HTTPS avec : sudo certbot --nginx -d monsite.fr
+# Dans neofrag.toml : bind = "127.0.0.1:8080", https = true, public_url = "https://monsite.fr"
+server {
+    listen 80;
+    server_name monsite.fr;
+
+    client_max_body_size 64m;   # envoi d'images (galerie)
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

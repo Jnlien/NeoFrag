@@ -1,0 +1,88 @@
+NeoFrag (Rust) - paquet prêt à déployer
+=======================================
+
+Ce qu'il faut chez l'hébergeur
+------------------------------
+- Un serveur Linux 64 bits (x86_64) où l'on peut lancer un programme : VPS, serveur
+  dédié, ou un panel de type Pterodactyl. Aucune dépendance à installer : ni PHP, ni
+  Rust, ni Apache.
+- Une base MySQL ou MariaDB (vide pour un nouveau site).
+
+ATTENTION : cela ne fonctionne PAS sur un hébergement mutualisé « PHP uniquement »
+(où l'on ne peut que déposer des fichiers .php) : NeoFrag est désormais un programme
+qui tourne en continu.
+
+Démarrage en 3 étapes
+---------------------
+1. Déposez tout le contenu de ce dossier sur le serveur (par exemple /opt/neofrag).
+
+2. Lancez une première fois :      ./start.sh
+   Le fichier neofrag.toml est créé avec des clés de sécurité tirées au hasard.
+   Ouvrez-le et remplacez la ligne « url = » de [database] par l'adresse de votre base :
+       url = "mysql://UTILISATEUR:MOTDEPASSE@HOTE:3306/NOM_DE_LA_BASE"
+
+3. Relancez :                      ./start.sh
+   La base étant vide, les tables et le compte administrateur sont créés tout seuls.
+   L'identifiant (admin) et le mot de passe s'affichent dans la console et sont écrits
+   dans identifiants-admin.txt : connectez-vous, changez le mot de passe, puis
+   supprimez ce fichier.
+
+Le site répond sur le port 8080 :  http://ADRESSE-DU-SERVEUR:8080
+
+Tout régler sans toucher au fichier (panels, conteneurs)
+--------------------------------------------------------
+Ces variables d'environnement priment sur neofrag.toml :
+  NEOFRAG_DATABASE_URL    mysql://utilisateur:motdepasse@hote:3306/base
+  NEOFRAG_PORT            port d'écoute (SERVER_PORT, fourni par Pterodactyl, est aussi lu)
+  NEOFRAG_PUBLIC_URL      adresse publique du site, ex. https://monsite.fr
+Et, pour la toute première installation seulement :
+  NEOFRAG_SITE_NAME, NEOFRAG_ADMIN_USER, NEOFRAG_ADMIN_EMAIL, NEOFRAG_ADMIN_PASSWORD
+
+Fichiers fournis
+----------------
+  neofrag                  le programme
+  assets/                  fichiers du site (css, js, images) ; les envois vont dans assets/upload
+  start.sh                 lance le serveur depuis ce dossier
+  neofrag.example.toml     toutes les options de configuration, commentées
+  neofrag.service          service systemd (démarrage automatique sur VPS / dédié)
+  nginx.conf.example       reverse proxy nginx (nom de domaine + HTTPS)
+  egg-neofrag.json         « egg » à importer dans un panel Pterodactyl
+  docker-compose.yml       site + base MariaDB avec Docker
+
+Mettre le site derrière un nom de domaine en HTTPS
+--------------------------------------------------
+Placez nginx (ou Apache, Caddy) devant : voir nginx.conf.example. Puis, dans
+neofrag.toml : bind = "127.0.0.1:8080", https = true, public_url = "https://monsite.fr".
+
+Démarrage automatique (systemd)
+-------------------------------
+  sudo useradd --system --home /opt/neofrag neofrag
+  sudo chown -R neofrag: /opt/neofrag
+  sudo cp neofrag.service /etc/systemd/system/
+  sudo systemctl enable --now neofrag
+  sudo journalctl -u neofrag -f        (pour voir les messages, dont le mot de passe initial)
+
+Pterodactyl
+-----------
+1. Admin > Nests > Import Egg : egg-neofrag.json.
+2. Créez un serveur avec cet egg et une base de données (onglet Databases).
+3. Renseignez la variable « Adresse de la base » (mysql://...), démarrez.
+   Si les fichiers ne sont pas téléchargés à l'installation, envoyez l'archive
+   neofrag-linux-x86_64.tar.gz dans le gestionnaire de fichiers et décompressez-la.
+
+Reprendre un ancien site NeoFrag (PHP)
+--------------------------------------
+Sauvegardez d'abord la base. Indiquez sa base dans neofrag.toml, recopiez dans
+password_salt la valeur de $password['salt'] (config/password.php de l'ancien site),
+et copiez son dossier upload/ dans assets/upload. Rien n'est recréé : les comptes et
+contenus existants sont repris.
+
+Sauvegardes
+-----------
+À sauvegarder : la base de données, le dossier assets/upload et neofrag.toml
+(il contient les clés : sans password_salt, plus personne ne peut se connecter).
+
+Mise à jour
+-----------
+Arrêtez le serveur, remplacez « neofrag » et « assets/ » (en gardant assets/upload et
+neofrag.toml), relancez.

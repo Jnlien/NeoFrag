@@ -101,16 +101,19 @@ pub async fn middleware(
             .to_owned()
     };
     let user_agent: String = header_str(header::USER_AGENT).chars().take(250).collect();
+    // `X-Real-IP` n'est cru que si la connexion vient d'un proxy local ou privé : en
+    // accès direct, un visiteur pourrait l'inventer pour contourner les limitations.
+    let peer = request.extensions().get::<ConnectInfo<SocketAddr>>().map(|info| info.0.ip());
+    let from_proxy = peer.is_some_and(|ip| match ip {
+        std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+        std::net::IpAddr::V6(v6) => v6.is_loopback() || v6.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback() || v4.is_private()),
+    });
     let ip = headers
         .get("x-real-ip")
+        .filter(|_| from_proxy)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned)
-        .or_else(|| {
-            request
-                .extensions()
-                .get::<ConnectInfo<SocketAddr>>()
-                .map(|info| info.0.ip().to_string())
-        })
+        .or_else(|| peer.map(|ip| ip.to_string()))
         .unwrap_or_default()
         .chars()
         .take(39)

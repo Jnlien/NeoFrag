@@ -1,0 +1,19 @@
+[Unit]
+Description=NeoFrag (site web)
+After=network-online.target mariadb.service mysql.service
+Wants=network-online.target
+
+[Service]
+User=neofrag
+WorkingDirectory=/opt/neofrag
+ExecStart=/opt/neofrag/neofrag
+Restart=on-failure
+RestartSec=5
+# Le programme n'écrit que dans son dossier.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/neofrag
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

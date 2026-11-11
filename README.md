@@ -44,15 +44,35 @@ Ce qui manque encore par rapport à l'original (langues, connexion Steam / Disco
 
 ## Installation
 
+### Paquet prêt à déployer
+
+`packaging/build-release.sh` fabrique `dist/neofrag-linux-x86_64.tar.gz` : le binaire
+(Linux x86_64, glibc ≥ 2.28 : Debian 10+, Ubuntu 20.04+, RHEL 8+), les fichiers statiques,
+un service systemd, un exemple nginx, un `docker-compose.yml` et un egg Pterodactyl.
+Le mode d'emploi est dans `LISEZ-MOI.txt`. En résumé :
+
+1. décompressez l'archive sur le serveur et lancez `./start.sh` : `neofrag.toml` est créé
+   avec des clés tirées au hasard ;
+2. indiquez l'adresse de la base MySQL / MariaDB dans `neofrag.toml` (ou dans la variable
+   `NEOFRAG_DATABASE_URL`) et relancez : sur une base vide, le schéma et le compte
+   administrateur sont créés automatiquement, et le mot de passe s'affiche une fois.
+
+Il faut un serveur où l'on peut lancer un programme (VPS, dédié, Pterodactyl, Docker) :
+un hébergement mutualisé « PHP uniquement » ne convient pas.
+
+### Depuis les sources
+
 Prérequis : Rust 1.80+ et MySQL ou MariaDB.
 
 ```bash
 cargo build --release
-cp neofrag.example.toml neofrag.toml   # puis éditez-le
 ./target/release/neofrag               # ou : neofrag /chemin/vers/neofrag.toml
 ```
 
 Le binaire a besoin du dossier `assets/` (ou de celui indiqué par `site.assets_dir`).
+
+Variables d'environnement prioritaires sur le fichier : `NEOFRAG_DATABASE_URL`,
+`NEOFRAG_PORT` (ou `SERVER_PORT`), `NEOFRAG_BIND`, `NEOFRAG_PUBLIC_URL`.
 
 ### Reprendre un site NeoFrag existant
 
@@ -64,16 +84,11 @@ Le binaire a besoin du dossier `assets/` (ou de celui indiqué par `site.assets_
 
 ### Installation neuve
 
-1. Créez une base MySQL / MariaDB vide (`CREATE DATABASE neofrag CHARACTER SET utf8mb4;`).
-2. Générez les deux secrets et recopiez-les dans `neofrag.toml`, avec l'URL de la base :
-   `neofrag secrets`
-3. Lancez l'installation : `neofrag install` crée le schéma, puis demande le nom du site
-   et le compte administrateur. Elle refuse de toucher à une base qui contient déjà des
-   tables NeoFrag.
-4. Lancez le serveur : `neofrag`.
-
-Pour une installation automatisée, les réponses peuvent venir de l'environnement :
-`NEOFRAG_SITE_NAME`, `NEOFRAG_ADMIN_USER`, `NEOFRAG_ADMIN_EMAIL`, `NEOFRAG_ADMIN_PASSWORD`.
+Au premier démarrage sur une base vide, tout est créé automatiquement (voir ci-dessus).
+Pour choisir soi-même le nom du site et le compte administrateur : `neofrag install`
+(questions dans le terminal), ou les variables `NEOFRAG_SITE_NAME`, `NEOFRAG_ADMIN_USER`,
+`NEOFRAG_ADMIN_EMAIL`, `NEOFRAG_ADMIN_PASSWORD`. Une base qui contient déjà des tables
+NeoFrag n'est jamais modifiée par l'installation.
 
 ### Emails
 
@@ -87,7 +102,8 @@ masquées, et les inscriptions sont fermées si le site exige une validation par
 
 Le serveur écoute en HTTP ; mettez nginx, Caddy ou Apache devant pour le HTTPS, activez
 `server.https = true` et transmettez l'adresse du visiteur dans l'en-tête `X-Real-IP`
-(utilisée pour l'historique des connexions et la limitation des tentatives).
+(utilisée pour l'historique des connexions et la limitation des tentatives ; elle n'est
+crue que si la connexion vient de la machine elle-même ou d'un réseau privé).
 
 ## Organisation du code
 
