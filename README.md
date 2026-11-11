@@ -9,8 +9,8 @@ de jeu et associations esport, dont le développement PHP s'est arrêté à l'Al
   pages, permissions et mise en page (dispositions + widgets) sont repris tels quels.
 - **Même rendu** : thème Azuro, mêmes URL (`/news/3/titre`, `/news/tag/…`, `/user/1/pseudo`…).
 
-> **État : socle fonctionnel, portage en cours.** Tous les modules d'origine ne sont pas
-> encore portés — la liste précise est dans [ROADMAP.md](ROADMAP.md).
+> **État : tous les modules d'origine sont portés, certains en version simplifiée.** Pas
+> encore éprouvé sur un site réel — écarts et reste à faire dans [ROADMAP.md](ROADMAP.md).
 
 ## Ce qui fonctionne
 
@@ -18,17 +18,29 @@ de jeu et associations esport, dont le développement PHP s'est arrêté à l'Al
 | --- | --- |
 | Noyau | Réglages (`nf_settings`), sessions (`nf_session`), groupes et permissions (`nf_access`), BBCode, pagination, slugs |
 | Thème | Azuro : 8 zones, dispositions par page (`nf_dispositions`), lignes / colonnes / widgets |
-| Widgets | `header`, `navigation`, `breadcrumb`, `module`, `user`, `members`, `news`, `search`, `html`, `copyright` |
+| Widgets | Tous ceux de l'original : `header`, `navigation`, `breadcrumb`, `module`, `copyright`, `html`, `search`, `user`, `members`, `news`, `forum`, `gallery`, `events`, `teams`, `partners`, `awards`, `recruits`, `talks`, `about`, `socials`, `slider` |
 | Actualités | Liste paginée, détail, catégories, tags |
 | Pages | Pages statiques avec permission d'accès par page |
-| Membres | Inscription (avec validation par email si le site l'exige), connexion / déconnexion, mot de passe oublié, espace membre, profil public, liste des membres |
+| Membres | Inscription (avec validation par email si le site l'exige), connexion / déconnexion, mot de passe oublié, espace membre, profil public, liste des membres, groupes |
 | Compte | Édition du profil (identité, pays, liens), avatar, identifiant, email, mot de passe |
-| Fichiers | Envoi d'images (`nf_file`, dossier `upload/`) : avatars, images d'actualités et de catégories |
-| Commentaires | Sur les actualités : ajout par les membres, suppression par l'auteur ou un administrateur |
+| Messagerie | Messages privés entre membres (conversations à plusieurs, non-lus) |
+| Forum | Catégories, forums et sous-forums, sujets, messages, annonces, verrouillage, déplacement, permissions par catégorie |
+| Événements | Agenda, types, matchs (adversaire, manches, scores), participants |
+| Équipes, Jeux | Équipes, rôles et joueurs ; jeux, cartes et modes |
+| Palmarès, Partenaires | Palmarès par équipe et par jeu ; partenaires avec compteur de visites |
+| Galerie | Albums, catégories, envoi de plusieurs images, commentaires |
+| Recrutement | Offres, candidatures (visiteurs et membres), avis du staff, décision avec réponse par email |
+| Discussions | Tchat par discussion, permissions lire / écrire / supprimer |
+| Fichiers | Envoi d'images (`nf_file`, dossier `upload/`) |
+| Commentaires | Sur les actualités, les événements et la galerie |
 | Contact | Formulaire envoyé par email à l'adresse du site |
 | Emails | SMTP (`[email]` dans `neofrag.toml`) ; sans configuration, les fonctions concernées sont désactivées |
 | Recherche | Actualités et pages |
-| Administration | Tableau de bord, actualités, catégories, pages, membres (droits, suppression), réglages de base |
+| Administration | Tous les modules ci-dessus, membres et groupes, permissions, Live Editor (zones et widgets), activation des modules et widgets, paramètres, mode maintenance, statistiques, supervision |
+
+Ce qui manque encore par rapport à l'original (langues, connexion Steam / Discord…,
+assistant d'installation, écarts module par module) est détaillé dans
+[ROADMAP.md](ROADMAP.md).
 
 ## Installation
 
@@ -48,7 +60,7 @@ Le binaire a besoin du dossier `assets/` (ou de celui indiqué par `site.assets_
 2. Dans `neofrag.toml` : mettez l'URL de la base (`config/db.php`) et recopiez dans
    `security.password_salt` la valeur de `$password['salt']` de `config/password.php`.
 3. Pointez `site.upload_dir` sur le dossier `upload/` du site.
-4. Lancez le serveur. Les widgets des modules pas encore portés sont simplement ignorés.
+4. Lancez le serveur. Un widget inconnu (ajouté par une extension tierce) est simplement ignoré.
 
 ### Installation neuve
 
@@ -81,7 +93,7 @@ src/
   main.rs          routes et démarrage
   config.rs        neofrag.toml
   core/            le « framework » : ctx, session, access, layout, panel, bbcode, php (unserialize)…
-  modules/         un fichier par module porté (news, pages, user, members, search, admin)
+  modules/         un fichier par module porté (news, forum, events, gallery, live_editor, system…)
   widgets/         un fichier par famille de widgets
 templates/         gabarits Askama (thème Azuro, vues, administration)
 assets/            fichiers statiques repris de l'original (css, js, polices, thèmes)
@@ -94,7 +106,9 @@ Chaque fichier indique en tête de quel fichier PHP il est le portage.
 
 - Jeton anti-CSRF sur tous les formulaires ; déconnexion en POST.
 - Identifiant de session renouvelé à la connexion ; cookie `HttpOnly` + `SameSite=Lax`.
-- Limitation des tentatives de connexion par adresse IP.
+- Limitation des tentatives de connexion par adresse IP, et des envois (messages, candidatures, tchat).
+- Les liens saisis (réseaux sociaux, menus) n'acceptent que des adresses web : jamais `javascript:`.
+- Permissions : les actions de modération sont refusées par défaut (liste blanche).
 - BBCode : URL `javascript:` / `data:` refusées dans `[url]` et `[img]`.
 - Images envoyées : type vérifié sur le contenu, image ré-encodée (métadonnées
   supprimées), SVG refusés, taille limitée (`site.max_upload_mb`).
