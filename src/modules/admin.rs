@@ -27,15 +27,26 @@ use serde::Deserialize;
 use sqlx::Row;
 use std::sync::Arc;
 
-type Ctxt = Extension<Arc<Ctx>>;
-type Reply = Result<Response, AppError>;
+pub type Ctxt = Extension<Arc<Ctx>>;
+pub type Reply = Result<Response, AppError>;
 
-const MENU: &[(&str, &str, &str, &str)] = &[
-    ("dashboard", "admin", "fas fa-tachometer-alt", "Tableau de bord"),
-    ("news", "admin/news", "far fa-file-alt", "Actualités"),
-    ("pages", "admin/pages", "far fa-file", "Pages"),
-    ("user", "admin/user", "fas fa-users", "Membres"),
-    ("settings", "admin/settings", "fas fa-cogs", "Paramètres"),
+/// Menu de l'administration : (clé, chemin, icône, libellé, module à activer ou "").
+const MENU: &[(&str, &str, &str, &str, &str)] = &[
+    ("dashboard", "admin", "fas fa-tachometer-alt", "Tableau de bord", ""),
+    ("news", "admin/news", "far fa-file-alt", "Actualités", "news"),
+    ("pages", "admin/pages", "far fa-file", "Pages", "pages"),
+    ("forum", "admin/forum", "fas fa-comments", "Forum", "forum"),
+    ("events", "admin/events", "far fa-calendar-alt", "Événements", "events"),
+    ("teams", "admin/teams", "fas fa-headset", "Équipes", "teams"),
+    ("games", "admin/games", "fas fa-gamepad", "Jeux", "games"),
+    ("awards", "admin/awards", "fas fa-trophy", "Palmarès", "awards"),
+    ("recruits", "admin/recruits", "fas fa-bullhorn", "Recrutement", "recruits"),
+    ("gallery", "admin/gallery", "far fa-image", "Galerie", "gallery"),
+    ("partners", "admin/partners", "far fa-handshake", "Partenaires", "partners"),
+    ("talks", "admin/talks", "far fa-comment-dots", "Discussions", "talks"),
+    ("user", "admin/user", "fas fa-users", "Membres", ""),
+    ("addons", "admin/addons", "fas fa-puzzle-piece", "Modules", ""),
+    ("settings", "admin/settings", "fas fa-cogs", "Paramètres", ""),
 ];
 
 #[derive(Template)]
@@ -44,7 +55,7 @@ struct AdminTemplate<'a> {
     base: &'a str,
     title: &'a str,
     active: &'a str,
-    menu: &'a [(&'a str, &'a str, &'a str, &'a str)],
+    menu: Vec<(&'a str, &'a str, &'a str, &'a str)>,
     csrf: String,
     username: &'a str,
     notice: Option<&'a str>,
@@ -57,17 +68,21 @@ pub struct Notice {
 }
 
 impl Notice {
-    fn message(&self) -> Option<&'static str> {
+    pub fn message(&self) -> Option<&'static str> {
         self.ok.as_ref().map(|_| "Modifications enregistrées.")
     }
 }
 
-fn render(ctx: &Ctx, active: &str, title: &str, notice: Option<&str>, content: String) -> Reply {
+pub fn render(ctx: &Ctx, active: &str, title: &str, notice: Option<&str>, content: String) -> Reply {
     let html = AdminTemplate {
         base: ctx.base(),
         title,
         active,
-        menu: MENU,
+        menu: MENU
+            .iter()
+            .filter(|item| item.4.is_empty() || ctx.enabled(item.4))
+            .map(|item| (item.0, item.1, item.2, item.3))
+            .collect(),
         csrf: ctx.csrf_token(),
         username: ctx.user.as_ref().map(|u| u.username.as_str()).unwrap_or(""),
         notice,
@@ -78,7 +93,7 @@ fn render(ctx: &Ctx, active: &str, title: &str, notice: Option<&str>, content: S
 }
 
 /// Refuse l'accès aux non-administrateurs (réponse à renvoyer telle quelle).
-async fn deny(ctx: &Ctx) -> Option<Reply> {
+pub async fn deny(ctx: &Ctx) -> Option<Reply> {
     if ctx.access.admin() {
         None
     } else {
@@ -86,7 +101,7 @@ async fn deny(ctx: &Ctx) -> Option<Reply> {
     }
 }
 
-fn check_csrf(ctx: &Ctx, token: &str) -> Result<(), AppError> {
+pub fn check_csrf(ctx: &Ctx, token: &str) -> Result<(), AppError> {
     if ctx.csrf_ok(token) {
         Ok(())
     } else {
@@ -94,19 +109,19 @@ fn check_csrf(ctx: &Ctx, token: &str) -> Result<(), AppError> {
     }
 }
 
-fn redirect(ctx: &Ctx, path: &str) -> Reply {
+pub fn redirect(ctx: &Ctx, path: &str) -> Reply {
     Ok(Redirect::to(&ctx.url(path)).into_response())
 }
 
 // ---------------------------------------------------------------------------
 // Petits helpers de formulaire (les valeurs sont des textes bruts, encodés ici).
 
-fn form_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str) -> String {
+pub fn form_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str) -> String {
     form_card_as(ctx, action, error, fields, back, false)
 }
 
 /// Variante `multipart/form-data`, pour les formulaires qui envoient un fichier.
-fn upload_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str) -> String {
+pub fn upload_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str) -> String {
     form_card_as(ctx, action, error, fields, back, true)
 }
 
@@ -127,14 +142,14 @@ fn form_card_as(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, ba
 }
 
 /// Lit un formulaire multipart d'administration et vérifie son jeton.
-async fn read_upload_form(ctx: &Ctx, multipart: Multipart) -> Result<FormData, AppError> {
+pub async fn read_upload_form(ctx: &Ctx, multipart: Multipart) -> Result<FormData, AppError> {
     let data = files::read_multipart(multipart).await.map_err(AppError::BadRequest)?;
     check_csrf(ctx, data.text("csrf"))?;
     Ok(data)
 }
 
 /// Champs « image » d'un formulaire : envoi, aperçu et case de suppression.
-fn image_fields(ctx: &Ctx, current: Option<&str>, help: &str) -> String {
+pub fn image_fields(ctx: &Ctx, current: Option<&str>, help: &str) -> String {
     let url = current.map(|path| ctx.url(path));
     let mut html = crate::core::form::image("Image", "image", url.as_deref(), help);
     if current.is_some() {
@@ -144,7 +159,7 @@ fn image_fields(ctx: &Ctx, current: Option<&str>, help: &str) -> String {
 }
 
 /// Enregistre l'image envoyée dans le formulaire, s'il y en a une.
-async fn save_form_image(ctx: &Ctx, data: &mut FormData, dir: &'static str) -> Result<Result<Option<u32>, &'static str>, AppError> {
+pub async fn save_form_image(ctx: &Ctx, data: &mut FormData, dir: &'static str) -> Result<Result<Option<u32>, &'static str>, AppError> {
     match data.take_file("image") {
         Some(upload) => Ok(files::save_image(ctx, dir, upload, Fit::MaxWidth(1600)).await?.map(Some)),
         None => Ok(Ok(None)),
@@ -153,7 +168,7 @@ async fn save_form_image(ctx: &Ctx, data: &mut FormData, dir: &'static str) -> R
 
 /// Après la mise à jour d'une ligne : supprime l'ancienne image si elle a été
 /// remplacée ou si sa suppression a été demandée.
-async fn drop_old_image(ctx: &Ctx, old: Option<u32>, new: Option<u32>, remove: bool) -> Result<(), AppError> {
+pub async fn drop_old_image(ctx: &Ctx, old: Option<u32>, new: Option<u32>, remove: bool) -> Result<(), AppError> {
     if let Some(old) = old {
         if new.is_some() || remove {
             files::delete(ctx, old).await?;
@@ -162,7 +177,7 @@ async fn drop_old_image(ctx: &Ctx, old: Option<u32>, new: Option<u32>, remove: b
     Ok(())
 }
 
-async fn image_of(ctx: &Ctx, sql: &'static str, id: u32) -> Result<(Option<u32>, Option<String>), AppError> {
+pub async fn image_of(ctx: &Ctx, sql: &'static str, id: u32) -> Result<(Option<u32>, Option<String>), AppError> {
     let row = sqlx::query(sql).bind(id).fetch_optional(&ctx.state.db).await?;
     Ok(match row {
         Some(row) => (row.try_get("image_id")?, row.try_get("path")?),
@@ -175,7 +190,103 @@ const NEWS_IMAGE: &str =
 const CATEGORY_IMAGE: &str = "SELECT c.image_id, f.path FROM nf_news_categories c \
      LEFT JOIN nf_file f ON f.id = c.image_id WHERE c.category_id = ?";
 
-fn delete_button(ctx: &Ctx, action: &str, confirm: &str) -> String {
+/// Champ image nommé, avec aperçu et case « supprimer » (`<champ>_remove`).
+pub fn image_field(ctx: &Ctx, label: &str, field: &str, current: Option<&str>, help: &str) -> String {
+    let url = current.map(|path| ctx.url(path));
+    let mut html = crate::core::form::image(label, field, url.as_deref(), help);
+    if current.is_some() {
+        html.push_str(&checkbox("Supprimer l'image actuelle", &format!("{field}_remove"), false));
+    }
+    html
+}
+
+/// Résultat d'un champ image : la valeur à écrire dans la colonne, et l'ancien
+/// fichier à supprimer **après** la mise à jour de la ligne (certaines clés
+/// étrangères vers `nf_file` sont en cascade : supprimer le fichier d'abord
+/// emporterait la ligne).
+pub struct ImageChange {
+    pub value: Option<u32>,
+    obsolete: Option<u32>,
+}
+
+impl ImageChange {
+    pub async fn finish(self, ctx: &Ctx) -> Result<(), AppError> {
+        match self.obsolete {
+            Some(file_id) => files::delete(ctx, file_id).await,
+            None => Ok(()),
+        }
+    }
+}
+
+/// Traite un champ image : nouvel envoi, suppression demandée, ou inchangé.
+pub async fn image_change(
+    ctx: &Ctx,
+    data: &mut FormData,
+    field: &str,
+    dir: &'static str,
+    fit: Fit,
+    old: Option<u32>,
+) -> Result<Result<ImageChange, &'static str>, AppError> {
+    if let Some(upload) = data.take_file(field) {
+        return Ok(files::save_image(ctx, dir, upload, fit)
+            .await?
+            .map(|new| ImageChange { value: Some(new), obsolete: old }));
+    }
+    if data.checked(&format!("{field}_remove")) {
+        return Ok(Ok(ImageChange { value: None, obsolete: old }));
+    }
+    Ok(Ok(ImageChange { value: old, obsolete: None }))
+}
+
+/// Carte « liste » : titre, bouton d'ajout facultatif, tableau.
+pub fn list_card(ctx: &Ctx, title: &str, add: Option<&str>, headers: &[&str], rows: &str) -> String {
+    let add = match add {
+        Some(path) => format!(
+            "<a class=\"btn btn-primary float-right\" href=\"{}\">{} Ajouter</a>",
+            ctx.url(path),
+            text::icon("fas fa-plus")
+        ),
+        None => String::new(),
+    };
+    let head: String = headers.iter().map(|h| format!("<th>{h}</th>")).collect();
+    let rows = if rows.is_empty() {
+        format!("<tr><td colspan=\"{}\" class=\"text-center text-muted\">Aucun élément</td></tr>", headers.len())
+    } else {
+        rows.to_owned()
+    };
+    format!(
+        "<div class=\"card\"><div class=\"card-body\">{add}<h5>{title}</h5></div>\
+         <table class=\"table table-hover mb-0\"><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div>"
+    )
+}
+
+/// Cellule d'actions d'une ligne : modifier + supprimer.
+pub fn row_actions(ctx: &Ctx, edit: &str, delete: &str, confirm: &str) -> String {
+    format!(
+        "<td class=\"text-right text-nowrap\">{} {}</td>",
+        edit_button(ctx, edit),
+        delete_button(ctx, delete, confirm)
+    )
+}
+
+/// À placer en tête de chaque action d'administration : réservé aux administrateurs,
+/// et (si un module est nommé) refusé quand ce module est désactivé.
+macro_rules! admin_guard {
+    ($ctx:expr) => {
+        if let Some(denied) = $crate::modules::admin::deny(&$ctx).await {
+            return denied;
+        }
+    };
+    ($ctx:expr, $module:literal) => {
+        if !$ctx.enabled($module) {
+            return $crate::core::layout::not_found(&$ctx).await;
+        }
+        $crate::modules::admin::admin_guard!($ctx);
+    };
+}
+pub(crate) use admin_guard;
+
+pub fn delete_button(ctx: &Ctx, action: &str, confirm: &str) -> String {
     format!(
         "<form method=\"post\" action=\"{}\" class=\"d-inline\" onsubmit=\"return confirm('{}');\">{}\
          <button type=\"submit\" class=\"btn btn-sm btn-outline-danger\" title=\"Supprimer\">{}</button></form>",
@@ -186,7 +297,7 @@ fn delete_button(ctx: &Ctx, action: &str, confirm: &str) -> String {
     )
 }
 
-fn edit_button(ctx: &Ctx, path: &str) -> String {
+pub fn edit_button(ctx: &Ctx, path: &str) -> String {
     format!(
         "<a class=\"btn btn-sm btn-outline-secondary\" href=\"{}\" title=\"Modifier\">{}</a>",
         ctx.url(path),
@@ -194,7 +305,7 @@ fn edit_button(ctx: &Ctx, path: &str) -> String {
     )
 }
 
-fn badge(on: bool, yes: &str, no: &str) -> String {
+pub fn badge(on: bool, yes: &str, no: &str) -> String {
     if on {
         format!("<span class=\"badge badge-success\">{yes}</span>")
     } else {
@@ -521,7 +632,7 @@ pub async fn news_edit_post(
 #[derive(Deserialize)]
 pub struct CsrfOnly {
     #[serde(default)]
-    csrf: String,
+    pub csrf: String,
 }
 
 pub async fn news_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): Form<CsrfOnly>) -> Reply {

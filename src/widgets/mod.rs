@@ -20,6 +20,7 @@ use crate::{
         text,
     },
     error::AppError,
+    modules,
 };
 use chrono::Datelike;
 use sqlx::Row;
@@ -31,6 +32,10 @@ pub async fn render(
     kind: &str,
     settings: &Value,
 ) -> Result<Option<Vec<Block>>, AppError> {
+    // Un widget rattaché à un module désactivé ne s'affiche pas.
+    if !ctx.enabled(name) {
+        return Ok(None);
+    }
     let blocks = match (name, kind) {
         ("module", _) => vec![Block::Html(page.content.clone())],
         ("header", _) => vec![Block::Html(header(ctx, settings).await?)],
@@ -54,6 +59,11 @@ pub async fn render(
         ("news", "categories") => news::categories(ctx).await?,
         ("news", "tags") => news::tags(ctx).await?,
         ("news", "index") => news::index(ctx).await?,
+        ("teams", _) => modules::teams::widget(ctx).await?,
+        ("partners", "column") => modules::partners::widget(ctx, settings, true).await?,
+        ("partners", _) => modules::partners::widget(ctx, settings, false).await?,
+        ("awards", _) => modules::awards::widget(ctx).await?,
+        ("events", kind) => modules::events::widget(ctx, kind).await?,
         _ => {
             tracing::debug!(widget = name, kind, "widget pas encore porté");
             return Ok(None);

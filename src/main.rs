@@ -14,7 +14,9 @@ use crate::{
     config::Config,
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
-    modules::{account, admin, comments, contact, members, news, pages, recovery, search, user},
+    modules::{
+        account, admin, awards, comments, contact, events, games, members, news, pages, partners, recovery, search, teams, user,
+    },
     state::AppState,
 };
 use axum::{
@@ -98,6 +100,17 @@ fn router(state: AppState) -> Router {
         .route("/user/lost-password", get(recovery::lost_get).post(recovery::lost_post))
         .route("/user/lost-password/{token}", get(recovery::reset_get).post(recovery::reset_post))
         .route("/contact", get(contact::index).post(contact::send))
+        // Équipes, partenaires, palmarès, événements
+        .route("/teams", get(teams::index))
+        .route("/teams/{id}/{name}", get(teams::show))
+        .route("/partners", get(partners::index))
+        .route("/partners/{id}/{name}", get(partners::visit))
+        .route("/awards", get(awards::index))
+        .route("/awards/{id}/{slug}", get(awards::show))
+        .route("/awards/{kind}/{id}/{slug}", get(awards::filtered))
+        .route("/events", get(events::index))
+        .route("/events/participant/{id}", post(events::participate))
+        .route("/events/{*rest}", get(events::route))
         .route("/comments/add", post(comments::add))
         .route("/comments/delete/{id}", post(comments::delete))
         .route("/user/{id}/{slug}", get(user::profile))
@@ -121,6 +134,40 @@ fn router(state: AppState) -> Router {
         .route("/admin/pages/add", get(admin::page_add_get).post(admin::page_add_post))
         .route("/admin/pages/{id}/{slug}", get(admin::page_edit_get).post(admin::page_edit_post))
         .route("/admin/pages/delete/{id}", post(admin::page_delete))
+        .route("/admin/games", get(games::admin_list))
+        .route("/admin/games/add", get(games::admin_add_get).post(games::admin_add_post))
+        .route("/admin/games/delete/{id}", post(games::admin_delete))
+        .route("/admin/games/{id}/{name}", get(games::admin_edit_get).post(games::admin_edit_post))
+        .route("/admin/games/{id}/{kind}/add", post(games::admin_sub_add))
+        .route("/admin/games/{kind}/delete/{id}", post(games::admin_sub_delete))
+        .route("/admin/teams", get(teams::admin_list))
+        .route("/admin/teams/add", get(teams::admin_add_get).post(teams::admin_add_post))
+        .route("/admin/teams/delete/{id}", post(teams::admin_delete))
+        .route("/admin/teams/roles/add", post(teams::admin_role_add))
+        .route("/admin/teams/roles/delete/{id}", post(teams::admin_role_delete))
+        .route("/admin/teams/{id}/{name}", get(teams::admin_edit_get).post(teams::admin_edit_post))
+        .route("/admin/teams/{id}/players/add", post(teams::admin_player_add))
+        .route("/admin/teams/{id}/players/delete/{user_id}", post(teams::admin_player_delete))
+        .route("/admin/partners", get(partners::admin_list))
+        .route("/admin/partners/add", get(partners::admin_add_get).post(partners::admin_add_post))
+        .route("/admin/partners/delete/{id}", post(partners::admin_delete))
+        .route("/admin/partners/{id}/{name}", get(partners::admin_edit_get).post(partners::admin_edit_post))
+        .route("/admin/awards", get(awards::admin_list))
+        .route("/admin/awards/add", get(awards::admin_add_get).post(awards::admin_add_post))
+        .route("/admin/awards/delete/{id}", post(awards::admin_delete))
+        .route("/admin/awards/{id}/{slug}", get(awards::admin_edit_get).post(awards::admin_edit_post))
+        .route("/admin/events", get(events::admin_list))
+        .route("/admin/events/add", get(events::admin_add_get).post(events::admin_add_post))
+        .route("/admin/events/delete/{id}", post(events::admin_delete))
+        .route("/admin/events/types/add", post(events::admin_type_add))
+        .route("/admin/events/types/delete/{id}", post(events::admin_type_delete))
+        .route("/admin/events/opponents/add", post(events::admin_opponent_add))
+        .route("/admin/events/opponents/delete/{id}", post(events::admin_opponent_delete))
+        .route("/admin/events/rounds/delete/{id}", post(events::admin_round_delete))
+        .route("/admin/events/{id}/{slug}", get(events::admin_edit_get).post(events::admin_edit_post))
+        .route("/admin/events/{id}/rounds/add", post(events::admin_round_add))
+        .route("/admin/events/{id}/participants/add", post(events::admin_participant_add))
+        .route("/admin/events/{id}/participants/delete/{user_id}", post(events::admin_participant_delete))
         .route("/admin/user", get(admin::users))
         .route("/admin/user/role/{id}", post(admin::user_role))
         .route("/admin/user/delete/{id}", post(admin::user_delete))

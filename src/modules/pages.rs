@@ -20,8 +20,9 @@ pub const ICON: &str = "far fa-file-alt";
 /// Noms de premier segment réservés aux modules et aux fichiers statiques : une page
 /// ne peut pas les porter (elle serait inaccessible).
 pub const RESERVED: &[&str] = &[
-    "admin", "ajax", "api", "comments", "contact", "css", "fonts", "images", "index", "js", "members", "modules", "news", "pages",
-    "search", "themes", "upload", "user", "widgets",
+    "admin", "ajax", "api", "awards", "comments", "contact", "css", "events", "fonts", "forum", "gallery", "games", "images",
+    "index", "js", "members", "modules", "news", "pages", "partners", "recruits", "search", "talks", "teams", "themes", "upload",
+    "user", "widgets",
 ];
 
 /// Affiche la page publiée nommée `name`, ou une 404.

@@ -37,6 +37,7 @@ async fn target_path(ctx: &Ctx, module: &str, module_id: u32) -> Result<Option<S
         "news" => news::find(&ctx.state.db, ctx.lang(), module_id, true)
             .await?
             .map(|item| item.path()),
+        "events" if ctx.enabled("events") => super::events::find_visible(ctx, module_id).await?.map(|event| event.path()),
         _ => None,
     })
 }

@@ -179,12 +179,32 @@ pub async fn middleware(
 
     let access = Access::load(&state.db, user.as_ref().map(|u| (u.id, u.admin))).await?;
 
+    // Modules désactivés : `nf_addon.data` est un tableau PHP sérialisé (`enabled`).
+    let mut disabled = Vec::new();
+    let addons = sqlx::query(
+        "SELECT a.name, IFNULL(a.data, '') AS data FROM nf_addon a \
+         INNER JOIN nf_addon_type t ON t.id = a.type_id AND t.name = 'module'",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    for row in addons {
+        let data: String = row.try_get("data")?;
+        let enabled = super::php::unserialize(&data)
+            .ok()
+            .and_then(|value| value.get("enabled").map(super::php::Value::truthy))
+            .unwrap_or(true);
+        if !enabled {
+            disabled.push(row.try_get("name")?);
+        }
+    }
+
     request.extensions_mut().insert(Arc::new(Ctx {
         state: state.clone(),
         settings,
         session_id,
         user,
         access,
+        disabled,
         path,
         ip,
         user_agent,

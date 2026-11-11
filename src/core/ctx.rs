@@ -15,6 +15,8 @@ pub struct Ctx {
     pub session_id: String,
     pub user: Option<User>,
     pub access: Access,
+    /// Modules désactivés dans l'administration (`nf_addon`).
+    pub disabled: Vec<String>,
     /// Chemin demandé, sans préfixe ni barre initiale (`news/3/titre`, vide pour l'accueil).
     pub path: String,
     pub ip: String,
@@ -28,6 +30,11 @@ impl Ctx {
 
     pub fn lang(&self) -> &str {
         &self.state.config.site.lang
+    }
+
+    /// Le module est-il activé ? (Un module absent de `nf_addon` est considéré actif.)
+    pub fn enabled(&self, module: &str) -> bool {
+        !self.disabled.iter().any(|name| name == module)
     }
 
     /// URL interne, équivalent du helper `url()`.
