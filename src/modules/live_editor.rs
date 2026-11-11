@@ -514,7 +514,7 @@ pub async fn row_move(Extension(ctx): Ctxt, Path((id, index, direction)): Path<(
 // ---------------------------------------------------------------------------
 // Widgets
 
-fn pick<'a>(allowed: &[&'a str], value: &str) -> Option<String> {
+fn pick(allowed: &[&str], value: &str) -> Option<String> {
     allowed.iter().copied().find(|a| *a == value && !a.is_empty()).map(str::to_owned)
 }
 

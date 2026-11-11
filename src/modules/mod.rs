@@ -11,6 +11,7 @@ pub mod gallery;
 pub mod games;
 pub mod live_editor;
 pub mod members;
+pub mod messages;
 pub mod news;
 pub mod pages;
 pub mod partners;

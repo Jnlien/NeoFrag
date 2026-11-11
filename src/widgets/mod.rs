@@ -53,7 +53,7 @@ pub async fn render(
         )],
         ("search", _) => vec![Block::Html(search(ctx, settings))],
         ("user", "index_mini") => vec![Block::Html(user::index_mini(ctx, settings))],
-        ("user", "index") => user::index(ctx),
+        ("user", "index") => user::index(ctx).await?,
         ("members", "online_mini") => vec![Block::Html(members::online_mini(ctx, settings).await?)],
         ("members", "online") => members::online(ctx).await?,
         ("members", "index") => members::index(ctx).await?,

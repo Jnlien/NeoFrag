@@ -7,6 +7,7 @@ use crate::{
         php::Value,
         text, user,
     },
+    error::AppError,
     modules,
 };
 
@@ -66,14 +67,16 @@ pub fn index_mini(ctx: &Ctx, settings: &Value) -> String {
 }
 
 /// Panel « Espace membre » : formulaire de connexion ou menu du membre.
-pub fn index(ctx: &Ctx) -> Vec<Block> {
+pub async fn index(ctx: &Ctx) -> Result<Vec<Block>, AppError> {
     let Some(current) = &ctx.user else {
-        return vec![Block::Panel(
+        return Ok(vec![Block::Panel(
             Panel::new()
                 .heading("Espace membre", "")
                 .body(modules::user::login_form(ctx, None)),
-        )];
+        )]);
     };
+    let unread = modules::messages::unread(ctx).await?;
+    let messages = if unread > 0 { format!("Messagerie <span class=\"badge badge-danger\">{unread}</span>") } else { "Messagerie".to_owned() };
 
     let entry = |icon: &str, path: &str, label: &str| {
         format!(
@@ -85,7 +88,7 @@ pub fn index(ctx: &Ctx) -> Vec<Block> {
     let profile = format!("user/{}/{}", current.id, text::url_title(&current.username));
     let mut body = format!(
         "<div class=\"card-body text-center\"><h6 class=\"mb-3\">Bienvenue <a href=\"{}\">{}</a></h6>{}</div>\
-         <ul class=\"list-group list-group-flush\">{}{}{}{}",
+         <ul class=\"list-group list-group-flush\">{}{}{}{}{}",
         ctx.url("user"),
         current.username,
         user::avatar_html(ctx.base(), current.avatar.as_deref(), current.sex.as_deref(), true, "m-auto"),
@@ -93,6 +96,7 @@ pub fn index(ctx: &Ctx) -> Vec<Block> {
         entry("far fa-eye", &profile, "Voir mon profil"),
         entry("fas fa-edit", "user/edit", "Modifier mon profil"),
         entry("fas fa-cogs", "user/account", "Gérer mon compte"),
+        entry("far fa-envelope", "user/messages", &messages),
     );
     if ctx.access.admin() {
         body.push_str(&entry("fas fa-tachometer-alt", "admin", "Administration"));
@@ -106,7 +110,7 @@ pub fn index(ctx: &Ctx) -> Vec<Block> {
         ctx.csrf_token(),
         text::icon("fas fa-times")
     );
-    vec![Block::Panel(
+    Ok(vec![Block::Panel(
         Panel::new().heading("Espace membre", "").body_raw(body).footer(footer, false),
-    )]
+    )])
 }

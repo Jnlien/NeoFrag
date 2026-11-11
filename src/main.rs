@@ -15,7 +15,7 @@ use crate::{
     core::{ctx::Ctx, layout, mail::Mailer, session},
     error::AppError,
     modules::{
-        account, admin, awards, comments, contact, events, forum, gallery, games, live_editor, members, news, pages, partners, recovery, recruits, search, settings, system, talks, teams, user,
+        account, admin, awards, comments, contact, events, forum, gallery, games, live_editor, members, messages, news, pages, partners, recovery, recruits, search, settings, system, talks, teams, user,
     },
     state::AppState,
 };
@@ -132,6 +132,11 @@ fn router(state: AppState) -> Router {
         .route("/talks/{*rest}", get(talks::route))
         .route("/comments/add", post(comments::add))
         .route("/comments/delete/{id}", post(comments::delete))
+        .route("/user/messages", get(messages::inbox))
+        .route("/user/messages/compose", get(messages::compose_get).post(messages::compose_post))
+        .route("/user/messages/delete/{id}", post(messages::delete))
+        .route("/user/messages/{id}/reply", post(messages::reply))
+        .route("/user/messages/{id}/{slug}", get(messages::show))
         .route("/user/{id}/{slug}", get(user::profile))
         .route("/search", get(search::index))
         // Administration
