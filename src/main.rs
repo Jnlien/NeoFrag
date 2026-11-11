@@ -14,11 +14,11 @@ use crate::{
     config::Config,
     core::{ctx::Ctx, layout, session},
     error::AppError,
-    modules::{admin, members, news, pages, search, user},
+    modules::{account, admin, members, news, pages, search, user},
     state::AppState,
 };
 use axum::{
-    extract::Request,
+    extract::{DefaultBodyLimit, Request},
     http::{header, HeaderValue, Method},
     middleware::{self, Next},
     response::{IntoResponse, Redirect, Response},
@@ -88,6 +88,12 @@ fn router(state: AppState) -> Router {
         .route("/user", get(user::index))
         .route("/user/login", get(user::login_get).post(user::login_post))
         .route("/user/logout", post(user::logout))
+        .route("/user/register", get(account::register_get).post(account::register_post))
+        .route("/user/edit", get(account::edit_get).post(account::edit_post))
+        .route("/user/avatar", post(account::avatar_post))
+        .route("/user/avatar/delete", post(account::avatar_delete))
+        .route("/user/account", get(account::account_get).post(account::account_post))
+        .route("/user/account/password", post(account::password_post))
         .route("/user/{id}/{slug}", get(user::profile))
         .route("/search", get(search::index))
         // Administration
@@ -110,8 +116,14 @@ fn router(state: AppState) -> Router {
         .route("/admin/pages/{id}/{slug}", get(admin::page_edit_get).post(admin::page_edit_post))
         .route("/admin/pages/delete/{id}", post(admin::page_delete))
         .route("/admin/user", get(admin::users))
+        .route("/admin/user/role/{id}", post(admin::user_role))
+        .route("/admin/user/delete/{id}", post(admin::user_delete))
         .route("/admin/settings", get(admin::settings_get).post(admin::settings_post))
         .fallback(fallback)
+        // Corps de requête : un fichier envoyé plus une marge pour les autres champs.
+        .layer(DefaultBodyLimit::max(
+            state.config.site.max_upload_mb.saturating_mul(1024 * 1024).saturating_add(1024 * 1024),
+        ))
         .layer(middleware::from_fn_with_state(state.clone(), session::middleware));
 
     let app = statics
@@ -172,7 +184,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         db,
         config: Arc::new(config),
-        login_attempts: Arc::default(),
+        throttle: Arc::default(),
     };
 
     let listener = tokio::net::TcpListener::bind(bind).await?;

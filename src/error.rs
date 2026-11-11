@@ -10,6 +10,8 @@ pub enum AppError {
     Db(sqlx::Error),
     Template(askama::Error),
     BadRequest(&'static str),
+    Io(std::io::Error),
+    Internal(&'static str),
 }
 
 impl From<sqlx::Error> for AppError {
@@ -30,6 +32,14 @@ impl IntoResponse for AppError {
             AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             AppError::Db(e) => {
                 tracing::error!(error = %e, "erreur base de données");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Erreur interne du serveur")
+            }
+            AppError::Io(e) => {
+                tracing::error!(error = %e, "erreur d'entrée/sortie");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Erreur interne du serveur")
+            }
+            AppError::Internal(what) => {
+                tracing::error!(what, "erreur interne");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erreur interne du serveur")
             }
             AppError::Template(e) => {

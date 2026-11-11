@@ -21,9 +21,11 @@ de jeu et associations esport, dont le développement PHP s'est arrêté à l'Al
 | Widgets | `header`, `navigation`, `breadcrumb`, `module`, `user`, `members`, `news`, `search`, `html`, `copyright` |
 | Actualités | Liste paginée, détail, catégories, tags |
 | Pages | Pages statiques avec permission d'accès par page |
-| Membres | Connexion / déconnexion, espace membre, profil public, liste des membres |
+| Membres | Inscription, connexion / déconnexion, espace membre, profil public, liste des membres |
+| Compte | Édition du profil (identité, pays, liens), avatar, identifiant, email, mot de passe |
+| Fichiers | Envoi d'images (`nf_file`, dossier `upload/`) : avatars, images d'actualités et de catégories |
 | Recherche | Actualités et pages |
-| Administration | Tableau de bord, actualités, catégories, pages, liste des membres, réglages de base |
+| Administration | Tableau de bord, actualités, catégories, pages, membres (droits, suppression), réglages de base |
 
 ## Installation
 
@@ -52,9 +54,8 @@ mysql -e "CREATE DATABASE neofrag CHARACTER SET utf8mb4"
 mysql neofrag < legacy/DATABASE.sql
 ```
 
-Compte initial : `admin` / `admin123` — **changez ce mot de passe** avant toute mise en
-ligne (l'édition du profil n'étant pas encore portée, voir ROADMAP : en attendant,
-ne mettez pas en ligne une installation neuve).
+Compte initial : `admin` / `admin123`. **Changez ce mot de passe dès la première
+connexion** (Espace membre → Mon compte), avant toute mise en ligne.
 
 ### Derrière un reverse proxy
 
@@ -84,6 +85,10 @@ Chaque fichier indique en tête de quel fichier PHP il est le portage.
 - Identifiant de session renouvelé à la connexion ; cookie `HttpOnly` + `SameSite=Lax`.
 - Limitation des tentatives de connexion par adresse IP.
 - BBCode : URL `javascript:` / `data:` refusées dans `[url]` et `[img]`.
+- Images envoyées : type vérifié sur le contenu, image ré-encodée (métadonnées
+  supprimées), SVG refusés, taille limitée (`site.max_upload_mb`).
+- Mots de passe de 8 caractères minimum ; changer de mot de passe déconnecte les autres
+  sessions ; modifier l'identifiant ou l'email demande le mot de passe actuel.
 - Tout texte lu en base est ré-encodé avant affichage (une donnée ancienne non encodée
   ne peut pas injecter de HTML).
 - Les mots de passe restent au format phpass de NeoFrag (compatibilité du schéma) :
@@ -92,7 +97,7 @@ Chaque fichier indique en tête de quel fichier PHP il est le portage.
 ## Développement
 
 ```bash
-cargo test      # tests unitaires (mots de passe, unserialize PHP, permissions, BBCode…)
+cargo test      # tests unitaires (mots de passe, unserialize PHP, permissions, BBCode, images…)
 cargo clippy
 RUST_LOG=neofrag=debug cargo run   # signale les widgets non portés rencontrés
 ```

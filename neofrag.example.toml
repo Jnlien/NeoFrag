@@ -30,3 +30,5 @@ lang = "fr"
 assets_dir = "assets"
 # Fichiers envoyés par les utilisateurs (dossier upload/ du site d'origine).
 upload_dir = "assets/upload"
+# Taille maximale d'un fichier envoyé (avatar, image d'actualité), en mégaoctets.
+max_upload_mb = 5

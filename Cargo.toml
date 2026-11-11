@@ -9,12 +9,13 @@ rust-version = "1.80"
 [dependencies]
 anyhow = "1"
 askama = "0.14"
-axum = { version = "0.8", features = ["form", "query"] }
+axum = { version = "0.8", features = ["form", "query", "multipart"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 hex = "0.4"
 hmac = "0.12"
 html-escape = "0.2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 md-5 = "0.10"
 rand = "0.8"
 regex = "1"

@@ -10,6 +10,6 @@ use std::{
 pub struct AppState {
     pub db: MySqlPool,
     pub config: Arc<Config>,
-    /// Tentatives de connexion ratées par adresse IP (anti force brute, en mémoire).
-    pub login_attempts: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
+    /// Compteurs anti-abus en mémoire (voir `core::throttle`) : clé → (nombre, début de fenêtre).
+    pub throttle: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
 }

@@ -52,6 +52,13 @@ pub fn index_mini(ctx: &Ctx, settings: &Value) -> String {
                 ctx.url("user/login"),
                 text::icon("fas fa-sign-in-alt")
             ));
+            if modules::account::registration_open(ctx) {
+                out.push_str(&format!(
+                    "<li class=\"nav-item\"><a class=\"nav-link\" href=\"{}\">{} Créer un compte</a></li>",
+                    ctx.url("user/register"),
+                    text::icon("fas fa-user-plus")
+                ));
+            }
         }
     }
     out.push_str("</ul>");
@@ -78,12 +85,14 @@ pub fn index(ctx: &Ctx) -> Vec<Block> {
     let profile = format!("user/{}/{}", current.id, text::url_title(&current.username));
     let mut body = format!(
         "<div class=\"card-body text-center\"><h6 class=\"mb-3\">Bienvenue <a href=\"{}\">{}</a></h6>{}</div>\
-         <ul class=\"list-group list-group-flush\">{}{}",
+         <ul class=\"list-group list-group-flush\">{}{}{}{}",
         ctx.url("user"),
         current.username,
         user::avatar_html(ctx.base(), current.avatar.as_deref(), current.sex.as_deref(), true, "m-auto"),
         entry("fas fa-user", "user", "Mon espace"),
         entry("far fa-eye", &profile, "Voir mon profil"),
+        entry("fas fa-edit", "user/edit", "Modifier mon profil"),
+        entry("fas fa-cogs", "user/account", "Gérer mon compte"),
     );
     if ctx.access.admin() {
         body.push_str(&entry("fas fa-tachometer-alt", "admin", "Administration"));

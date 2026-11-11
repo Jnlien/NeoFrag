@@ -67,6 +67,8 @@ pub struct Site {
     pub assets_dir: PathBuf,
     /// Dossier des fichiers envoyés (les chemins `upload/...` de `nf_file`).
     pub upload_dir: PathBuf,
+    /// Taille maximale d'un fichier envoyé, en mégaoctets.
+    pub max_upload_mb: usize,
 }
 
 impl Default for Site {
@@ -75,6 +77,7 @@ impl Default for Site {
             lang: "fr".to_owned(),
             assets_dir: PathBuf::from("assets"),
             upload_dir: PathBuf::from("assets/upload"),
+            max_upload_mb: 5,
         }
     }
 }

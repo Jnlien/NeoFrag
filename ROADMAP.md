@@ -27,19 +27,26 @@ du travail restant.
 | Module Pages (public) | `modules/pages` | `src/modules/pages.rs` |
 | Module Membres | `modules/members` | `src/modules/members.rs` |
 | Module Utilisateur (connexion, profil public) | `modules/user` (partiel) | `src/modules/user.rs` |
+| Inscription, édition du profil, avatar, identifiants, mot de passe | `modules/user/forms/*` | `src/modules/account.rs` |
+| Envoi de fichiers (images) | `models/file.php` | `src/core/files.rs` |
+| Formulaires | `libraries/form*.php` (partiel) | `src/core/form.rs` |
+| Pays | `helpers/countries.php` | `src/core/countries.rs` |
+| Limitation des tentatives | (absent de l'original) | `src/core/throttle.rs` |
 | Recherche (actualités, pages) | `modules/search` (partiel) | `src/modules/search.rs` |
-| Administration (actualités, catégories, pages, réglages de base) | `modules/admin`, `news`, `pages`, `settings` (partiel) | `src/modules/admin.rs` |
+| Administration (actualités et catégories avec images, pages, membres, réglages de base) | `modules/admin`, `news`, `pages`, `settings` (partiel) | `src/modules/admin.rs` |
 | Widgets header, navigation, breadcrumb, module, user, members, news, search, html, copyright | `widgets/*` | `src/widgets/` |
 
 ## Reste à faire
 
 ### 1. Socle manquant (à faire avant les gros modules)
 
-- **Envoi de fichiers** (`nf_file`, dossier `upload/`) : images d'actualités et de
-  catégories, avatars, logo. Bloque : galerie, équipes, partenaires, profils.
-- **Module Utilisateur, suite** (2 700 lignes) : inscription, validation par email, mot de
-  passe oublié, édition du profil et du compte, avatar / couverture, messagerie privée,
-  historique des sessions, administration des membres et des groupes.
+- **Module Utilisateur, suite** : validation de l'inscription par email (tant qu'elle
+  n'est pas portée, les inscriptions sont fermées si `nf_registration_validation` est
+  activé), mot de passe oublié, captcha, message de bienvenue, image de couverture,
+  messagerie privée, historique des sessions, administration des groupes.
+- **Envoi de fichiers, suite** : seules les images sont gérées ; les autres types
+  (pièces jointes) viendront avec les modules qui en ont besoin. Les avatars GIF animés
+  sont figés (ré-encodage).
 - **Emails** (SMTP, `config/email.php`, gabarits) : nécessaire à l'inscription et au contact.
 - **Commentaires** (`modules/comments`, 320 lignes) : utilisés par actualités, galerie, événements.
 - **Administration des permissions** (`modules/access`, 610 lignes) et accès à
@@ -99,9 +106,10 @@ rendu (visibles avec `RUST_LOG=neofrag=debug`).
 
 ## Ordre conseillé
 
-1. Envoi de fichiers → 2. Utilisateur (inscription, profil, mot de passe) → 3. Emails →
-4. Commentaires → 5. Permissions + addons → 6. Équipes / Jeux → 7. Événements →
-8. Forum → 9. Galerie, Partenaires, Palmarès, Recrutement → 10. Live editor →
+1. ~~Envoi de fichiers~~ (fait) → 2. ~~Utilisateur : inscription, profil, mot de passe~~ (fait) →
+3. Emails (validation d'inscription, mot de passe oublié, contact) → 4. Commentaires →
+5. Permissions + addons → 6. Équipes / Jeux → 7. Événements → 8. Forum →
+9. Galerie, Partenaires, Palmarès, Recrutement → 10. Live editor →
 11. Thème d'administration → 12. Internationalisation → 13. OAuth, installation.
 
 ## Décisions prises

@@ -1,15 +1,15 @@
 //! Module Utilisateur : connexion, déconnexion, espace membre et profils publics.
-//! Porté de `modules/user` (inscription, messagerie et édition du profil : voir ROADMAP).
+//! Porté de `modules/user`. Inscription et édition du compte : voir `account.rs`.
 
 use crate::{
     core::{
+        countries,
         ctx::Ctx,
         layout::{self, Page},
         panel::{Block, Panel},
-        password, session, text, user,
+        password, session, text, throttle, user,
     },
     error::AppError,
-    state::AppState,
 };
 use axum::{
     extract::Path,
@@ -17,13 +17,10 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     Extension, Form,
 };
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use serde::Deserialize;
 use sqlx::Row;
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
 
 pub const TITLE: &str = "Espace membre";
 pub const ICON: &str = "fas fa-user";
@@ -44,9 +41,14 @@ pub fn login_form(ctx: &Ctx, error: Option<&str>) -> String {
          <div class=\"form-group\"><input type=\"password\" class=\"form-control\" name=\"password\" placeholder=\"Mot de passe\" autocomplete=\"current-password\" required /></div>\
          <div class=\"form-group form-check\"><input type=\"checkbox\" class=\"form-check-input\" name=\"remember\" value=\"on\" id=\"login-remember\" />\
          <label class=\"form-check-label\" for=\"login-remember\">Se souvenir de moi</label></div>\
-         <button type=\"submit\" class=\"btn btn-primary\">Se connecter</button></form>",
+         <button type=\"submit\" class=\"btn btn-primary\">Se connecter</button>{register}</form>",
         action = ctx.url("user/login"),
         csrf = ctx.csrf_token(),
+        register = if super::account::registration_open(ctx) {
+            format!(" <a class=\"btn btn-link\" href=\"{}\">Créer un compte</a>", ctx.url("user/register"))
+        } else {
+            String::new()
+        },
     )
 }
 
@@ -82,21 +84,6 @@ pub struct LoginForm {
     remember: Option<String>,
 }
 
-/// Trop de tentatives ratées récentes depuis cette adresse ?
-fn locked_out(state: &AppState, ip: &str) -> bool {
-    let attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
-    attempts
-        .get(ip)
-        .is_some_and(|(count, since)| *count >= MAX_FAILED_LOGINS && since.elapsed() < LOCKOUT)
-}
-
-fn record_failure(state: &AppState, ip: &str) {
-    let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
-    attempts.retain(|_, (_, since)| since.elapsed() < LOCKOUT);
-    let entry = attempts.entry(ip.to_owned()).or_insert((0, Instant::now()));
-    entry.0 += 1;
-}
-
 pub async fn login_post(
     Extension(ctx): Extension<Arc<Ctx>>,
     Form(form): Form<LoginForm>,
@@ -105,15 +92,17 @@ pub async fn login_post(
         return login_page(&ctx, Some("Votre session a expiré, veuillez réessayer.")).await;
     }
     let state = &ctx.state;
-    if locked_out(state, &ctx.ip) {
+    let throttle_key = format!("login:{}", ctx.ip);
+    if throttle::blocked(state, &throttle_key, MAX_FAILED_LOGINS, LOCKOUT) {
         return login_page(&ctx, Some("Trop de tentatives, veuillez patienter quelques minutes.")).await;
     }
 
     let row = sqlx::query(
         "SELECT id, password, salt FROM nf_user WHERE deleted = '0' AND (username = ? OR email = ?) LIMIT 1",
     )
-    .bind(&form.login)
-    .bind(&form.login)
+    // Les pseudos sont stockés encodés en entités (convention NeoFrag), pas les emails.
+    .bind(text::encode(form.login.trim()))
+    .bind(form.login.trim())
     .fetch_optional(&state.db)
     .await?;
 
@@ -130,7 +119,7 @@ pub async fn login_post(
     };
 
     let Some((user_id, verified)) = verified else {
-        record_failure(state, &ctx.ip);
+        throttle::hit(state, &throttle_key, LOCKOUT);
         return login_page(&ctx, Some("Identifiants invalides")).await;
     };
 
@@ -162,6 +151,21 @@ pub async fn logout(Extension(ctx): Extension<Arc<Ctx>>, Form(form): Form<CsrfFo
     Ok(Redirect::to(&ctx.url("")).into_response())
 }
 
+/// Réseaux affichés sur le profil : (colonne, icône, préfixe d'URL).
+pub const SOCIALS: &[(&str, &str, &str)] = &[
+    ("linkedin", "fab fa-linkedin-in", "https://www.linkedin.com/in/"),
+    ("github", "fab fa-github", "https://github.com/"),
+    ("instagram", "fab fa-instagram", "https://www.instagram.com/"),
+    ("twitch", "fab fa-twitch", "https://www.twitch.tv/"),
+];
+
+/// Un identifiant de réseau social sûr à placer dans une URL.
+pub fn valid_handle(handle: &str) -> bool {
+    !handle.is_empty()
+        && handle.len() <= 100
+        && handle.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
 struct Profile {
     id: u32,
     username: String,
@@ -170,10 +174,16 @@ struct Profile {
     last_activity_date: Option<NaiveDateTime>,
     avatar: Option<String>,
     sex: Option<String>,
+    first_name: String,
+    last_name: String,
+    date_of_birth: Option<NaiveDate>,
+    country: String,
     quote: String,
     location: String,
     website: String,
     signature: String,
+    /// Identifiants des réseaux, dans l'ordre de [`SOCIALS`].
+    socials: Vec<String>,
     online: bool,
 }
 
@@ -181,8 +191,13 @@ async fn load_profile(ctx: &Ctx, user_id: u32) -> Result<Option<Profile>, AppErr
     let row = sqlx::query(
         "SELECT u.id, u.username, (u.admin = '1') AS admin, CAST(u.registration_date AS DATETIME) AS registration_date, \
                 CAST(u.last_activity_date AS DATETIME) AS last_activity_date, \
-                f.path AS avatar, up.sex, IFNULL(up.quote, '') AS quote, IFNULL(up.location, '') AS location, \
+                f.path AS avatar, up.sex, up.date_of_birth, \
+                IFNULL(up.first_name, '') AS first_name, IFNULL(up.last_name, '') AS last_name, \
+                IFNULL(up.country, '') AS country, \
+                IFNULL(up.quote, '') AS quote, IFNULL(up.location, '') AS location, \
                 IFNULL(up.website, '') AS website, IFNULL(up.signature, '') AS signature, \
+                IFNULL(up.linkedin, '') AS linkedin, IFNULL(up.github, '') AS github, \
+                IFNULL(up.instagram, '') AS instagram, IFNULL(up.twitch, '') AS twitch, \
                 EXISTS(SELECT 1 FROM nf_session s WHERE s.user_id = u.id \
                        AND s.last_activity > DATE_SUB(NOW(), INTERVAL 5 MINUTE)) AS online \
          FROM nf_user u \
@@ -197,6 +212,10 @@ async fn load_profile(ctx: &Ctx, user_id: u32) -> Result<Option<Profile>, AppErr
     let Some(row) = row else {
         return Ok(None);
     };
+    let mut socials = Vec::with_capacity(SOCIALS.len());
+    for (column, _, _) in SOCIALS {
+        socials.push(text::decode(&row.try_get::<String, _>(*column)?));
+    }
     Ok(Some(Profile {
         id: row.try_get("id")?,
         username: text::clean(&row.try_get::<String, _>("username")?),
@@ -205,12 +224,22 @@ async fn load_profile(ctx: &Ctx, user_id: u32) -> Result<Option<Profile>, AppErr
         last_activity_date: row.try_get("last_activity_date")?,
         avatar: row.try_get("avatar")?,
         sex: row.try_get("sex")?,
+        first_name: text::clean(&row.try_get::<String, _>("first_name")?),
+        last_name: text::clean(&row.try_get::<String, _>("last_name")?),
+        date_of_birth: row.try_get("date_of_birth")?,
+        country: row.try_get("country")?,
         quote: text::clean(&row.try_get::<String, _>("quote")?),
         location: text::clean(&row.try_get::<String, _>("location")?),
         website: row.try_get("website")?,
         signature: text::clean(&row.try_get::<String, _>("signature")?),
+        socials,
         online: row.try_get::<i64, _>("online")? != 0,
     }))
+}
+
+/// Âge révolu à la date `today`.
+fn age(born: NaiveDate, today: NaiveDate) -> Option<u32> {
+    today.years_since(born)
 }
 
 fn profile_panel(ctx: &Ctx, profile: &Profile) -> Panel {
@@ -230,20 +259,43 @@ fn profile_panel(ctx: &Ctx, profile: &Profile) -> Panel {
             "<span class=\"badge badge-success\">Membre</span>".to_owned()
         },
     );
-    detail("fas fa-sign-in-alt", "Inscription", text::date_short(&profile.registration_date));
-    if let Some(date) = &profile.last_activity_date {
-        detail("fas fa-history", "Dernière activité", text::date_short(date));
+    let full_name = format!("{} {}", profile.first_name, profile.last_name);
+    if !full_name.trim().is_empty() {
+        detail("far fa-user", "Nom", full_name.trim().to_owned());
+    }
+    if let Some(age) = profile.date_of_birth.and_then(|born| age(born, chrono::Local::now().date_naive())) {
+        detail("fas fa-birthday-cake", "Âge", format!("{age} ans"));
+    }
+    if let Some(country) = countries::name(&profile.country) {
+        detail("fas fa-flag", "Pays", text::encode(country));
     }
     if !profile.location.is_empty() {
         detail("fas fa-map-marker-alt", "Localisation", profile.location.clone());
     }
+    detail("fas fa-sign-in-alt", "Inscription", text::date_short(&profile.registration_date));
+    if let Some(date) = &profile.last_activity_date {
+        detail("fas fa-history", "Dernière activité", text::date_short(date));
+    }
+
+    let mut socials = String::new();
     let website = text::decode(&profile.website);
     if website.starts_with("http://") || website.starts_with("https://") {
-        detail(
-            "fas fa-globe",
-            "Site web",
-            format!("<a href=\"{0}\" rel=\"nofollow noopener\">{0}</a>", text::encode(&website)),
-        );
+        socials.push_str(&format!(
+            "<a class=\"btn website\" href=\"{}\" rel=\"nofollow noopener\" target=\"_blank\">{}</a>",
+            text::encode(&website),
+            text::icon("fas fa-globe")
+        ));
+    }
+    for ((name, icon, prefix), handle) in SOCIALS.iter().zip(&profile.socials) {
+        if valid_handle(handle) {
+            socials.push_str(&format!(
+                "<a class=\"btn {name}\" href=\"{prefix}{handle}\" rel=\"nofollow noopener\" target=\"_blank\">{}</a>",
+                text::icon(icon)
+            ));
+        }
+    }
+    if !socials.is_empty() {
+        socials = format!("<div class=\"socials\">{socials}</div>");
     }
 
     let quote = if profile.quote.is_empty() {
@@ -260,7 +312,7 @@ fn profile_panel(ctx: &Ctx, profile: &Profile) -> Panel {
         )
     };
     let body = format!(
-        "<div class=\"card-body user-profile\">{}<h4 class=\"mt-3 mb-0\">{}</h4>{quote}</div>\
+        "<div class=\"card-body user-profile\">{}<h4 class=\"mt-3 mb-0\">{}</h4>{quote}{socials}</div>\
          <ul class=\"list-group list-group-flush\">{details}</ul>{signature}",
         user::avatar_html(ctx.base(), profile.avatar.as_deref(), profile.sex.as_deref(), profile.online, ""),
         profile.username,
@@ -276,7 +328,18 @@ pub async fn index(Extension(ctx): Extension<Arc<Ctx>>) -> Result<Response, AppE
     let Some(profile) = load_profile(&ctx, current.id).await? else {
         return layout::not_found(&ctx).await;
     };
-    let page = Page::new("user", TITLE, ICON).blocks(&[Block::Panel(profile_panel(&ctx, &profile))]);
+    let actions = format!(
+        "<a class=\"btn btn-primary\" href=\"{}\">{} Modifier mon profil</a> \
+         <a class=\"btn btn-secondary\" href=\"{}\">{} Gérer mon compte</a>",
+        ctx.url("user/edit"),
+        text::icon("fas fa-edit"),
+        ctx.url("user/account"),
+        text::icon("fas fa-cogs"),
+    );
+    let page = Page::new("user", TITLE, ICON).blocks(&[
+        Block::Panel(profile_panel(&ctx, &profile)),
+        Block::Panel(Panel::new().style("card-transparent text-right").body_raw(actions)),
+    ]);
     layout::render(&ctx, page).await
 }
 
@@ -298,4 +361,27 @@ pub async fn profile(
         .crumb(profile.username.clone(), path)
         .blocks(&[Block::Panel(profile_panel(&ctx, &profile))]);
     layout::render(&ctx, page).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handles() {
+        assert!(valid_handle("Jnlien"));
+        assert!(valid_handle("jean-dupont_01.x"));
+        assert!(!valid_handle(""));
+        assert!(!valid_handle("a/b"));
+        assert!(!valid_handle("x\" onclick=\"y"));
+        assert!(!valid_handle("javascript:alert(1)"));
+    }
+
+    #[test]
+    fn ages() {
+        let d = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+        assert_eq!(age(d(2000, 11, 12), d(2026, 11, 11)), Some(25));
+        assert_eq!(age(d(2000, 11, 11), d(2026, 11, 11)), Some(26));
+        assert_eq!(age(d(2030, 1, 1), d(2026, 11, 11)), None);
+    }
 }

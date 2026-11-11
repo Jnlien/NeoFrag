@@ -6,12 +6,19 @@
 
 use super::{news, pages};
 use crate::{
-    core::{ctx::Ctx, layout, settings::Settings, text},
+    core::{
+        ctx::Ctx,
+        files::{self, Fit, FormData},
+        form::{checkbox, csrf_field, fits, input, textarea},
+        layout,
+        settings::Settings,
+        text,
+    },
     error::AppError,
 };
 use askama::Template;
 use axum::{
-    extract::{Path, Query},
+    extract::{Multipart, Path, Query},
     response::{Html, IntoResponse, Redirect, Response},
     Extension, Form,
 };
@@ -94,40 +101,18 @@ fn redirect(ctx: &Ctx, path: &str) -> Reply {
 // ---------------------------------------------------------------------------
 // Petits helpers de formulaire (les valeurs sont des textes bruts, encodés ici).
 
-fn csrf_field(ctx: &Ctx) -> String {
-    format!("<input type=\"hidden\" name=\"csrf\" value=\"{}\" />", ctx.csrf_token())
-}
-
-fn input(label: &str, name: &str, value: &str, max: usize, required: bool, help: &str) -> String {
-    format!(
-        "<div class=\"form-group\"><label for=\"f-{name}\"><b>{label}</b></label>\
-         <input type=\"text\" class=\"form-control\" id=\"f-{name}\" name=\"{name}\" value=\"{}\" maxlength=\"{max}\"{} />{}</div>",
-        text::encode(value),
-        if required { " required" } else { "" },
-        if help.is_empty() { String::new() } else { format!("<small class=\"form-text text-muted\">{help}</small>") },
-    )
-}
-
-fn textarea(label: &str, name: &str, value: &str, rows: u8, required: bool) -> String {
-    format!(
-        "<div class=\"form-group\"><label for=\"f-{name}\"><b>{label}</b> <small class=\"text-muted\">BBCode accepté</small></label>\
-         <textarea class=\"form-control\" id=\"f-{name}\" name=\"{name}\" rows=\"{rows}\"{}>{}</textarea></div>",
-        if required { " required" } else { "" },
-        text::encode(value),
-    )
-}
-
-fn checkbox(label: &str, name: &str, checked: bool) -> String {
-    format!(
-        "<div class=\"form-group form-check\"><input type=\"checkbox\" class=\"form-check-input\" id=\"f-{name}\" name=\"{name}\" value=\"on\"{} />\
-         <label class=\"form-check-label\" for=\"f-{name}\">{label}</label></div>",
-        if checked { " checked" } else { "" },
-    )
-}
-
 fn form_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str) -> String {
+    form_card_as(ctx, action, error, fields, back, false)
+}
+
+/// Variante `multipart/form-data`, pour les formulaires qui envoient un fichier.
+fn upload_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str) -> String {
+    form_card_as(ctx, action, error, fields, back, true)
+}
+
+fn form_card_as(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back: &str, multipart: bool) -> String {
     format!(
-        "<div class=\"card\"><div class=\"card-body\">{}<form method=\"post\" action=\"{}\">{}{fields}\
+        "<div class=\"card\"><div class=\"card-body\">{}<form method=\"post\" action=\"{}\"{}>{}{fields}\
          <button type=\"submit\" class=\"btn btn-primary\">Enregistrer</button> \
          <a class=\"btn btn-link\" href=\"{}\">Annuler</a></form></div></div>",
         match error {
@@ -135,10 +120,60 @@ fn form_card(ctx: &Ctx, action: &str, error: Option<&str>, fields: String, back:
             None => String::new(),
         },
         ctx.url(action),
+        if multipart { " enctype=\"multipart/form-data\"" } else { "" },
         csrf_field(ctx),
         ctx.url(back),
     )
 }
+
+/// Lit un formulaire multipart d'administration et vérifie son jeton.
+async fn read_upload_form(ctx: &Ctx, multipart: Multipart) -> Result<FormData, AppError> {
+    let data = files::read_multipart(multipart).await.map_err(AppError::BadRequest)?;
+    check_csrf(ctx, data.text("csrf"))?;
+    Ok(data)
+}
+
+/// Champs « image » d'un formulaire : envoi, aperçu et case de suppression.
+fn image_fields(ctx: &Ctx, current: Option<&str>, help: &str) -> String {
+    let url = current.map(|path| ctx.url(path));
+    let mut html = crate::core::form::image("Image", "image", url.as_deref(), help);
+    if current.is_some() {
+        html.push_str(&checkbox("Supprimer l'image actuelle", "image_remove", false));
+    }
+    html
+}
+
+/// Enregistre l'image envoyée dans le formulaire, s'il y en a une.
+async fn save_form_image(ctx: &Ctx, data: &mut FormData, dir: &'static str) -> Result<Result<Option<u32>, &'static str>, AppError> {
+    match data.take_file("image") {
+        Some(upload) => Ok(files::save_image(ctx, dir, upload, Fit::MaxWidth(1600)).await?.map(Some)),
+        None => Ok(Ok(None)),
+    }
+}
+
+/// Après la mise à jour d'une ligne : supprime l'ancienne image si elle a été
+/// remplacée ou si sa suppression a été demandée.
+async fn drop_old_image(ctx: &Ctx, old: Option<u32>, new: Option<u32>, remove: bool) -> Result<(), AppError> {
+    if let Some(old) = old {
+        if new.is_some() || remove {
+            files::delete(ctx, old).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn image_of(ctx: &Ctx, sql: &'static str, id: u32) -> Result<(Option<u32>, Option<String>), AppError> {
+    let row = sqlx::query(sql).bind(id).fetch_optional(&ctx.state.db).await?;
+    Ok(match row {
+        Some(row) => (row.try_get("image_id")?, row.try_get("path")?),
+        None => (None, None),
+    })
+}
+
+const NEWS_IMAGE: &str =
+    "SELECT n.image_id, f.path FROM nf_news n LEFT JOIN nf_file f ON f.id = n.image_id WHERE n.news_id = ?";
+const CATEGORY_IMAGE: &str = "SELECT c.image_id, f.path FROM nf_news_categories c \
+     LEFT JOIN nf_file f ON f.id = c.image_id WHERE c.category_id = ?";
 
 fn delete_button(ctx: &Ctx, action: &str, confirm: &str) -> String {
     format!(
@@ -165,11 +200,6 @@ fn badge(on: bool, yes: &str, no: &str) -> String {
     } else {
         format!("<span class=\"badge badge-secondary\">{no}</span>")
     }
-}
-
-/// Longueur en caractères une fois encodé, telle que stockée en base (colonnes `varchar`).
-fn fits(value: &str, max: usize) -> bool {
-    text::encode(value).chars().count() <= max
 }
 
 // ---------------------------------------------------------------------------
@@ -273,21 +303,30 @@ pub async fn news_list(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> Re
     render(&ctx, "news", "Actualités", notice.message(), content)
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Default)]
 pub struct NewsForm {
-    #[serde(default)]
-    csrf: String,
-    #[serde(default)]
     title: String,
-    #[serde(default)]
     category_id: String,
-    #[serde(default)]
     introduction: String,
-    #[serde(default)]
     content: String,
-    #[serde(default)]
     tags: String,
-    published: Option<String>,
+    published: bool,
+    /// Image propre à l'actualité (chemin `nf_file.path`), pour l'aperçu.
+    image: Option<String>,
+}
+
+impl NewsForm {
+    fn from_data(data: &FormData, image: Option<String>) -> Self {
+        Self {
+            title: data.text("title").to_owned(),
+            category_id: data.text("category_id").to_owned(),
+            introduction: data.text("introduction").to_owned(),
+            content: data.text("content").to_owned(),
+            tags: data.text("tags").to_owned(),
+            published: data.checked("published"),
+            image,
+        }
+    }
 }
 
 /// `_tags()` de l'original : séparateurs espace, virgule ou point-virgule, sans doublon.
@@ -323,14 +362,15 @@ async fn news_form(ctx: &Ctx, action: &str, form: &NewsForm, error: Option<&str>
         .collect();
     let fields = format!(
         "{}<div class=\"form-group\"><label for=\"f-category\"><b>Catégorie</b></label>\
-         <select class=\"form-control\" id=\"f-category\" name=\"category_id\">{options}</select></div>{}{}{}{}",
+         <select class=\"form-control\" id=\"f-category\" name=\"category_id\">{options}</select></div>{}{}{}{}{}",
         input("Titre", "title", &form.title, 100, true, ""),
+        image_fields(ctx, form.image.as_deref(), "Facultative : sans image, celle de la catégorie est utilisée."),
         textarea("Introduction", "introduction", &form.introduction, 5, true),
         textarea("Contenu", "content", &form.content, 12, false),
         input("Tags", "tags", &form.tags, 250, false, "Séparés par des virgules"),
-        checkbox("Publiée", "published", form.published.is_some()),
+        checkbox("Publiée", "published", form.published),
     );
-    render(ctx, "news", title, None, form_card(ctx, action, error, fields, "admin/news"))
+    render(ctx, "news", title, None, upload_card(ctx, action, error, fields, "admin/news"))
 }
 
 fn validate_news(form: &NewsForm) -> Result<u32, &'static str> {
@@ -356,17 +396,18 @@ pub async fn news_add_get(Extension(ctx): Ctxt) -> Reply {
         return denied;
     }
     let form = NewsForm {
-        published: Some("on".to_owned()),
+        published: true,
         ..NewsForm::default()
     };
     news_form(&ctx, "admin/news/add", &form, None, "Ajouter une actualité").await
 }
 
-pub async fn news_add_post(Extension(ctx): Ctxt, Form(form): Form<NewsForm>) -> Reply {
+pub async fn news_add_post(Extension(ctx): Ctxt, multipart: Multipart) -> Reply {
     if let Some(denied) = deny(&ctx).await {
         return denied;
     }
-    check_csrf(&ctx, &form.csrf)?;
+    let mut data = read_upload_form(&ctx, multipart).await?;
+    let form = NewsForm::from_data(&data, None);
     let title = "Ajouter une actualité";
     let category_id = match validate_news(&form) {
         Ok(id) if category_exists(&ctx, id).await? => id,
@@ -376,12 +417,17 @@ pub async fn news_add_post(Extension(ctx): Ctxt, Form(form): Form<NewsForm>) -> 
     let Some(author) = &ctx.user else {
         return layout::forbidden(&ctx).await;
     };
+    let image_id = match save_form_image(&ctx, &mut data, "news").await? {
+        Ok(image_id) => image_id,
+        Err(message) => return news_form(&ctx, "admin/news/add", &form, Some(message), title).await,
+    };
 
     let mut tx = ctx.state.db.begin().await?;
-    let result = sqlx::query("INSERT INTO nf_news (category_id, user_id, published) VALUES (?, ?, ?)")
+    let result = sqlx::query("INSERT INTO nf_news (category_id, user_id, image_id, published) VALUES (?, ?, ?, ?)")
         .bind(category_id)
         .bind(author.id)
-        .bind(if form.published.is_some() { "1" } else { "0" })
+        .bind(image_id)
+        .bind(if form.published { "1" } else { "0" })
         .execute(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO nf_news_lang (news_id, lang, title, introduction, content, tags) VALUES (?, ?, ?, ?, ?, ?)")
@@ -408,13 +454,13 @@ pub async fn news_edit_get(Extension(ctx): Ctxt, Path((id, _slug)): Path<(String
         return layout::not_found(&ctx).await;
     };
     let form = NewsForm {
-        csrf: String::new(),
         title: text::decode(&item.title),
         category_id: item.category_id.to_string(),
         introduction: text::decode(&item.introduction),
         content: text::decode(&item.content),
         tags: text::decode(&item.tags),
-        published: item.published.then(|| "on".to_owned()),
+        published: item.published,
+        image: image_of(&ctx, NEWS_IMAGE, id).await?.1,
     };
     news_form(&ctx, &format!("admin/{}", item.path()), &form, None, "Modifier l'actualité").await
 }
@@ -422,12 +468,12 @@ pub async fn news_edit_get(Extension(ctx): Ctxt, Path((id, _slug)): Path<(String
 pub async fn news_edit_post(
     Extension(ctx): Ctxt,
     Path((id, slug)): Path<(String, String)>,
-    Form(form): Form<NewsForm>,
+    multipart: Multipart,
 ) -> Reply {
     if let Some(denied) = deny(&ctx).await {
         return denied;
     }
-    check_csrf(&ctx, &form.csrf)?;
+    let mut data = read_upload_form(&ctx, multipart).await?;
     let Ok(id) = id.parse::<u32>() else {
         return layout::not_found(&ctx).await;
     };
@@ -435,6 +481,8 @@ pub async fn news_edit_post(
     if news::find(db, ctx.lang(), id, false).await?.is_none() {
         return layout::not_found(&ctx).await;
     }
+    let (old_image, old_path) = image_of(&ctx, NEWS_IMAGE, id).await?;
+    let form = NewsForm::from_data(&data, old_path);
     let action = format!("admin/news/{id}/{}", text::url_title(&slug));
     let title = "Modifier l'actualité";
     let category_id = match validate_news(&form) {
@@ -443,10 +491,16 @@ pub async fn news_edit_post(
         Err(message) => return news_form(&ctx, &action, &form, Some(message), title).await,
     };
 
+    let new_image = match save_form_image(&ctx, &mut data, "news").await? {
+        Ok(image_id) => image_id,
+        Err(message) => return news_form(&ctx, &action, &form, Some(message), title).await,
+    };
+
     let mut tx = db.begin().await?;
-    sqlx::query("UPDATE nf_news SET category_id = ?, published = ? WHERE news_id = ?")
+    sqlx::query("UPDATE nf_news SET category_id = ?, published = ?, image_id = IFNULL(?, image_id) WHERE news_id = ?")
         .bind(category_id)
-        .bind(if form.published.is_some() { "1" } else { "0" })
+        .bind(if form.published { "1" } else { "0" })
+        .bind(new_image)
         .bind(id)
         .execute(&mut *tx)
         .await?;
@@ -460,6 +514,7 @@ pub async fn news_edit_post(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    drop_old_image(&ctx, old_image, new_image, data.checked("image_remove")).await?;
     redirect(&ctx, "admin/news?ok=1")
 }
 
@@ -474,6 +529,7 @@ pub async fn news_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): 
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;
+    let (image, _) = image_of(&ctx, NEWS_IMAGE, id).await?;
     let mut tx = ctx.state.db.begin().await?;
     sqlx::query("DELETE FROM nf_comment WHERE module = 'news' AND module_id = ?")
         .bind(id)
@@ -481,23 +537,26 @@ pub async fn news_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): 
         .await?;
     sqlx::query("DELETE FROM nf_news WHERE news_id = ?").bind(id).execute(&mut *tx).await?;
     tx.commit().await?;
+    drop_old_image(&ctx, image, None, true).await?;
     redirect(&ctx, "admin/news?ok=1")
 }
 
 // ---------------------------------------------------------------------------
 // Catégories d'actualités
 
-#[derive(Deserialize, Default)]
+#[derive(Default)]
 pub struct CategoryForm {
-    #[serde(default)]
-    csrf: String,
-    #[serde(default)]
     title: String,
+    image: Option<String>,
 }
 
 fn category_form(ctx: &Ctx, action: &str, form: &CategoryForm, error: Option<&str>, title: &str) -> Reply {
-    let fields = input("Titre", "title", &form.title, 100, true, "");
-    render(ctx, "news", title, None, form_card(ctx, action, error, fields, "admin/news"))
+    let fields = format!(
+        "{}{}",
+        input("Titre", "title", &form.title, 100, true, ""),
+        image_fields(ctx, form.image.as_deref(), "Illustre les actualités de la catégorie qui n'ont pas leur propre image."),
+    );
+    render(ctx, "news", title, None, upload_card(ctx, action, error, fields, "admin/news"))
 }
 
 fn validate_category(form: &CategoryForm) -> Result<String, &'static str> {
@@ -518,20 +577,28 @@ pub async fn category_add_get(Extension(ctx): Ctxt) -> Reply {
     category_form(&ctx, "admin/news/categories/add", &CategoryForm::default(), None, "Ajouter une catégorie")
 }
 
-pub async fn category_add_post(Extension(ctx): Ctxt, Form(form): Form<CategoryForm>) -> Reply {
+pub async fn category_add_post(Extension(ctx): Ctxt, multipart: Multipart) -> Reply {
     if let Some(denied) = deny(&ctx).await {
         return denied;
     }
-    check_csrf(&ctx, &form.csrf)?;
+    let mut data = read_upload_form(&ctx, multipart).await?;
+    let form = CategoryForm {
+        title: data.text("title").to_owned(),
+        image: None,
+    };
+    let fail = |message| category_form(&ctx, "admin/news/categories/add", &form, Some(message), "Ajouter une catégorie");
     let name = match validate_category(&form) {
         Ok(name) => name,
-        Err(message) => {
-            return category_form(&ctx, "admin/news/categories/add", &form, Some(message), "Ajouter une catégorie")
-        }
+        Err(message) => return fail(message),
+    };
+    let image_id = match save_form_image(&ctx, &mut data, "news/categories").await? {
+        Ok(image_id) => image_id,
+        Err(message) => return fail(message),
     };
     let mut tx = ctx.state.db.begin().await?;
-    let result = sqlx::query("INSERT INTO nf_news_categories (name) VALUES (?)")
+    let result = sqlx::query("INSERT INTO nf_news_categories (name, image_id) VALUES (?, ?)")
         .bind(&name)
+        .bind(image_id)
         .execute(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO nf_news_categories_lang (category_id, lang, title) VALUES (?, ?, ?)")
@@ -556,8 +623,8 @@ pub async fn category_edit_get(Extension(ctx): Ctxt, Path((id, _name)): Path<(St
         return layout::not_found(&ctx).await;
     };
     let form = CategoryForm {
-        csrf: String::new(),
         title: text::decode(&category.title),
+        image: image_of(&ctx, CATEGORY_IMAGE, category.category_id).await?.1,
     };
     let action = format!("admin/news/categories/{}/{}", category.category_id, category.name);
     category_form(&ctx, &action, &form, None, "Modifier la catégorie")
@@ -566,28 +633,37 @@ pub async fn category_edit_get(Extension(ctx): Ctxt, Path((id, _name)): Path<(St
 pub async fn category_edit_post(
     Extension(ctx): Ctxt,
     Path((id, _name)): Path<(String, String)>,
-    Form(form): Form<CategoryForm>,
+    multipart: Multipart,
 ) -> Reply {
     if let Some(denied) = deny(&ctx).await {
         return denied;
     }
-    check_csrf(&ctx, &form.csrf)?;
+    let mut data = read_upload_form(&ctx, multipart).await?;
     let Ok(id) = id.parse::<u32>() else {
         return layout::not_found(&ctx).await;
     };
     if !category_exists(&ctx, id).await? {
         return layout::not_found(&ctx).await;
     }
+    let (old_image, old_path) = image_of(&ctx, CATEGORY_IMAGE, id).await?;
+    let form = CategoryForm {
+        title: data.text("title").to_owned(),
+        image: old_path,
+    };
+    let action = format!("admin/news/categories/{id}/x");
+    let fail = |message| category_form(&ctx, &action, &form, Some(message), "Modifier la catégorie");
     let name = match validate_category(&form) {
         Ok(name) => name,
-        Err(message) => {
-            let action = format!("admin/news/categories/{id}/x");
-            return category_form(&ctx, &action, &form, Some(message), "Modifier la catégorie");
-        }
+        Err(message) => return fail(message),
+    };
+    let new_image = match save_form_image(&ctx, &mut data, "news/categories").await? {
+        Ok(image_id) => image_id,
+        Err(message) => return fail(message),
     };
     let mut tx = ctx.state.db.begin().await?;
-    sqlx::query("UPDATE nf_news_categories SET name = ? WHERE category_id = ?")
+    sqlx::query("UPDATE nf_news_categories SET name = ?, image_id = IFNULL(?, image_id) WHERE category_id = ?")
         .bind(&name)
+        .bind(new_image)
         .bind(id)
         .execute(&mut *tx)
         .await?;
@@ -601,6 +677,7 @@ pub async fn category_edit_post(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    drop_old_image(&ctx, old_image, new_image, data.checked("image_remove")).await?;
     redirect(&ctx, "admin/news?ok=1")
 }
 
@@ -609,6 +686,12 @@ pub async fn category_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(for
         return denied;
     }
     check_csrf(&ctx, &form.csrf)?;
+    // Images à supprimer du disque : celle de la catégorie et celles de ses actualités.
+    let mut images: Vec<u32> = sqlx::query_scalar("SELECT image_id FROM nf_news WHERE category_id = ? AND image_id IS NOT NULL")
+        .bind(id)
+        .fetch_all(&ctx.state.db)
+        .await?;
+    images.extend(image_of(&ctx, CATEGORY_IMAGE, id).await?.0);
     let mut tx = ctx.state.db.begin().await?;
     sqlx::query(
         "DELETE FROM nf_comment WHERE module = 'news' AND module_id IN (SELECT news_id FROM nf_news WHERE category_id = ?)",
@@ -622,6 +705,9 @@ pub async fn category_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(for
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    for image in images {
+        files::delete(&ctx, image).await?;
+    }
     redirect(&ctx, "admin/news?ok=1")
 }
 
@@ -864,9 +950,9 @@ pub async fn page_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): 
 }
 
 // ---------------------------------------------------------------------------
-// Membres (lecture seule pour l'instant)
+// Membres
 
-pub async fn users(Extension(ctx): Ctxt) -> Reply {
+pub async fn users(Extension(ctx): Ctxt, Query(notice): Query<Notice>) -> Reply {
     if let Some(denied) = deny(&ctx).await {
         return denied;
     }
@@ -878,6 +964,7 @@ pub async fn users(Extension(ctx): Ctxt) -> Reply {
     )
     .fetch_all(&ctx.state.db)
     .await?;
+    let me = ctx.user.as_ref().map(|u| u.id);
 
     let mut body = String::new();
     for row in &rows {
@@ -885,20 +972,73 @@ pub async fn users(Extension(ctx): Ctxt) -> Reply {
         let username = text::clean(&row.try_get::<String, _>("username")?);
         let registered: NaiveDateTime = row.try_get("registration_date")?;
         let last: Option<NaiveDateTime> = row.try_get("last_activity_date")?;
+        let is_admin = row.try_get::<i64, _>("admin")? != 0;
+        // On ne peut ni se rétrograder ni se supprimer soi-même : il resterait
+        // possiblement un site sans administrateur.
+        let actions = if Some(id) == me {
+            String::new()
+        } else {
+            format!(
+                "<form method=\"post\" action=\"{}\" class=\"d-inline\">{}\
+                 <button type=\"submit\" class=\"btn btn-sm btn-outline-secondary\" title=\"{}\">{}</button></form> {}",
+                ctx.url(&format!("admin/user/role/{id}")),
+                csrf_field(&ctx),
+                if is_admin { "Retirer les droits d'administrateur" } else { "Nommer administrateur" },
+                text::icon(if is_admin { "fas fa-user-minus" } else { "fas fa-user-shield" }),
+                delete_button(&ctx, &format!("admin/user/delete/{id}"), "Supprimer ce membre ?"),
+            )
+        };
         body.push_str(&format!(
-            "<tr><td>{id}</td><td><a href=\"{}\">{username}</a></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><td>{id}</td><td><a href=\"{}\">{username}</a></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td>\
+             <td class=\"text-right text-nowrap\">{actions}</td></tr>",
             ctx.url(&format!("user/{id}/{}", text::url_title(&username))),
             text::clean(&row.try_get::<String, _>("email")?),
-            badge(row.try_get::<i64, _>("admin")? != 0, "Administrateur", "Membre"),
+            badge(is_admin, "Administrateur", "Membre"),
             text::date_short(&registered),
             last.map(|d| text::date_short(&d)).unwrap_or_else(|| "—".to_owned()),
         ));
     }
     let content = format!(
         "<div class=\"card\"><table class=\"table table-hover mb-0\"><thead><tr><th>#</th><th>Pseudo</th><th>Email</th>\
-         <th>Groupe</th><th>Inscription</th><th>Dernière activité</th></tr></thead><tbody>{body}</tbody></table></div>"
+         <th>Groupe</th><th>Inscription</th><th>Dernière activité</th><th></th></tr></thead><tbody>{body}</tbody></table></div>"
     );
-    render(&ctx, "user", "Membres", None, content)
+    render(&ctx, "user", "Membres", notice.message(), content)
+}
+
+/// Donne ou retire les droits d'administrateur.
+pub async fn user_role(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): Form<CsrfOnly>) -> Reply {
+    if let Some(denied) = deny(&ctx).await {
+        return denied;
+    }
+    check_csrf(&ctx, &form.csrf)?;
+    if ctx.user.as_ref().map(|u| u.id) == Some(id) {
+        return Err(AppError::BadRequest("Vous ne pouvez pas modifier vos propres droits."));
+    }
+    sqlx::query("UPDATE nf_user SET admin = IF(admin = '1', '0', '1') WHERE id = ? AND deleted = '0'")
+        .bind(id)
+        .execute(&ctx.state.db)
+        .await?;
+    redirect(&ctx, "admin/user?ok=1")
+}
+
+/// Supprime un membre. Comme l'original, le compte est marqué `deleted` : ses
+/// contenus restent, il ne peut plus se connecter et son pseudo redevient libre.
+pub async fn user_delete(Extension(ctx): Ctxt, Path(id): Path<u32>, Form(form): Form<CsrfOnly>) -> Reply {
+    if let Some(denied) = deny(&ctx).await {
+        return denied;
+    }
+    check_csrf(&ctx, &form.csrf)?;
+    if ctx.user.as_ref().map(|u| u.id) == Some(id) {
+        return Err(AppError::BadRequest("Vous ne pouvez pas supprimer votre propre compte ici."));
+    }
+    let mut tx = ctx.state.db.begin().await?;
+    sqlx::query("UPDATE nf_user SET deleted = '1', admin = '0' WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM nf_session WHERE user_id = ?").bind(id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    redirect(&ctx, "admin/user?ok=1")
 }
 
 // ---------------------------------------------------------------------------
@@ -991,11 +1131,5 @@ mod tests {
     fn tags() {
         assert_eq!(normalize_tags("a, b;c  a"), "a,b,c");
         assert_eq!(normalize_tags("  "), "");
-    }
-
-    #[test]
-    fn encoded_length() {
-        assert!(fits(&"a".repeat(100), 100));
-        assert!(!fits(&"&".repeat(30), 100));
     }
 }

@@ -1,5 +1,6 @@
 //! Modules portés. Chaque fichier correspond à un dossier `modules/<nom>` de l'original.
 
+pub mod account;
 pub mod admin;
 pub mod members;
 pub mod news;
