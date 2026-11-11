@@ -1,7 +1,3 @@
-/.gitignore
-/backups
-/cache
-/logs
-/upload
-*.map
-*.scssc
+/target
+/neofrag.toml
+*.log

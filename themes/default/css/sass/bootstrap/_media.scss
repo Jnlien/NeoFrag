@@ -1,9 +1,0 @@
-.media {
-	+ .media {
-		margin-top: 10px;
-	}
-
-	.media-left + .media-body, .avatar + .media-body {
-		margin-left: 10px;
-	}
-}

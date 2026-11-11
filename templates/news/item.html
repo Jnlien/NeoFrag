@@ -1,0 +1,31 @@
+{% if let Some(image) = image %}
+<a href="{{ url }}"><img class="card-img-top" src="{{ image }}" alt="" /></a>
+{% endif %}
+<div class="card-body">
+	<h5 class="card-title"><a href="{{ url }}">{{ title|safe }}</a></h5>
+	<p class="card-text">{{ introduction|safe }}</p>
+	<blockquote class="blockquote mb-0">
+		{% if let Some(share) = share_url %}
+		<div class="btn-group float-right">
+			<a class="btn btn-light btn-sm" href="https://www.facebook.com/sharer.php?u={{ share }}" target="_blank" rel="noopener"><i class="icon fab fa-facebook-f text-primary fa-fw"></i></a>
+			<a class="btn btn-light btn-sm" href="https://twitter.com/share?url={{ share }}" target="_blank" rel="noopener"><i class="icon fab fa-twitter text-info fa-fw"></i></a>
+		</div>
+		{% endif %}
+		<footer class="blockquote-footer">Par {{ author|safe }} le {{ date }} / <a href="{{ category_url }}">{{ category_title|safe }}</a></footer>
+	</blockquote>
+</div>
+{% if !tags.is_empty() || has_more %}
+<div class="card-footer">
+	{% if !tags.is_empty() %}
+	<ul class="list-inline mb-0 float-left">
+		<li class="list-inline-item"><small><i class="icon fas fa-tag fa-fw"></i></small></li>
+		{% for tag in tags %}
+		<li class="list-inline-item"><a href="{{ tag.0 }}"><small>{{ tag.1|safe }}</small></a></li>
+		{% endfor %}
+	</ul>
+	{% endif %}
+	{% if has_more %}
+	<a href="{{ url }}" class="btn btn-sm btn-secondary float-right">Continuer à lire</a>
+	{% endif %}
+</div>
+{% endif %}

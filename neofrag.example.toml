@@ -1,0 +1,32 @@
+# Configuration de NeoFrag (Rust). Copiez ce fichier en `neofrag.toml` et adaptez-le.
+# Il remplace les fichiers config/*.php de l'installation PHP.
+
+[server]
+# Adresse d'écoute. Placez un reverse proxy (nginx, Caddy, Apache) devant pour le HTTPS.
+bind = "127.0.0.1:8080"
+# Préfixe si le site n'est pas à la racine du domaine, ex. "/site". Vide sinon.
+base_url = ""
+# true derrière un proxy HTTPS : le cookie de session devient « Secure ».
+https = false
+
+[database]
+# Même base MySQL/MariaDB que le site NeoFrag PHP (config/db.php).
+url = "mysql://utilisateur:motdepasse@localhost:3306/neofrag"
+max_connections = 10
+
+[security]
+# Valeur de $password['salt'] dans config/password.php du site d'origine.
+# Sans elle, les comptes existants ne pourront pas se connecter.
+# Pour une installation neuve : 64 caractères aléatoires, à ne plus jamais changer.
+password_salt = "REMPLACEZ-MOI"
+# Clé secrète du serveur (jetons anti-CSRF) : 32 caractères aléatoires minimum.
+# Exemple pour en générer une : openssl rand -hex 32
+secret_key = "REMPLACEZ-MOI-PAR-AU-MOINS-32-CARACTERES-ALEATOIRES"
+
+[site]
+# Langue des contenus (colonnes `lang` des tables *_lang).
+lang = "fr"
+# Fichiers statiques (css, js, polices, thèmes).
+assets_dir = "assets"
+# Fichiers envoyés par les utilisateurs (dossier upload/ du site d'origine).
+upload_dir = "assets/upload"

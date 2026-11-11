@@ -1,0 +1,34 @@
+[package]
+name = "neofrag"
+version = "0.3.0-dev"
+edition = "2021"
+description = "NeoFrag CMS — réécriture en Rust (Axum + Askama + SQLx), compatible avec le schéma MySQL de NeoFrag Alpha 0.2.3"
+license = "LGPL-3.0-or-later"
+rust-version = "1.80"
+
+[dependencies]
+anyhow = "1"
+askama = "0.14"
+axum = { version = "0.8", features = ["form", "query"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+hex = "0.4"
+hmac = "0.12"
+html-escape = "0.2"
+md-5 = "0.10"
+rand = "0.8"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+time = "0.3"
+sqlx = { version = "0.8", default-features = false, features = ["mysql", "runtime-tokio", "chrono"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+toml = "0.8"
+tower-http = { version = "0.6", features = ["fs", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+urlencoding = "2"
+
+[profile.release]
+lto = "thin"
+strip = true

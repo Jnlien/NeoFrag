@@ -1,55 +1,104 @@
-# NeoFrag
+# NeoFrag (Rust)
 
-[![Release](https://img.shields.io/github/release/NeoFragCMS/neofrag-cms.svg)](https://github.com/NeoFragCMS/neofrag-cms/tags)
+Réécriture en Rust de [NeoFrag](https://github.com/NeoFrag/NeoFrag), le CMS pour équipes
+de jeu et associations esport, dont le développement PHP s'est arrêté à l'Alpha 0.2.3.
 
-NeoFrag est un CMS qui vous offre des fonctionnalités évoluées pour la gestion de votre équipe de jeu, association sportive ou esportive ! Facile à prendre en main, complet et performant, vous pouvez créer votre site internet avec des interfaces modernes et personnalisables, le tout gratuitement, sans connaissance particulière.
+- **Un seul binaire** : Axum (HTTP) + Askama (templates compilés) + SQLx (MySQL/MariaDB).
+- **Même base de données** : le serveur lit et écrit le schéma de NeoFrag Alpha 0.2.3.
+  Il se branche sur la base d'un site existant : comptes, mots de passe, actualités,
+  pages, permissions et mise en page (dispositions + widgets) sont repris tels quels.
+- **Même rendu** : thème Azuro, mêmes URL (`/news/3/titre`, `/news/tag/…`, `/user/1/pseudo`…).
 
-##### En savoir plus sur NeoFrag
+> **État : socle fonctionnel, portage en cours.** Tous les modules d'origine ne sont pas
+> encore portés — la liste précise est dans [ROADMAP.md](ROADMAP.md).
 
-- [Présentation](#présentation)
-- [Prérequis](#prérequis)
-- [Installation](#fr-installation)
-- [Contribuer](#contribuer)
+## Ce qui fonctionne
 
-## Présentation
+| Domaine | Détail |
+| --- | --- |
+| Noyau | Réglages (`nf_settings`), sessions (`nf_session`), groupes et permissions (`nf_access`), BBCode, pagination, slugs |
+| Thème | Azuro : 8 zones, dispositions par page (`nf_dispositions`), lignes / colonnes / widgets |
+| Widgets | `header`, `navigation`, `breadcrumb`, `module`, `user`, `members`, `news`, `search`, `html`, `copyright` |
+| Actualités | Liste paginée, détail, catégories, tags |
+| Pages | Pages statiques avec permission d'accès par page |
+| Membres | Connexion / déconnexion, espace membre, profil public, liste des membres |
+| Recherche | Actualités et pages |
+| Administration | Tableau de bord, actualités, catégories, pages, liste des membres, réglages de base |
 
-NeoFrag est un projet imaginé en 2011, qui a vu ça première version Alpha 0.1 lancée en juin 2015. Pour en savoir plus et rester informé de l'avancement du projet, rendez-nous visite sur le site officiel [NeoFrag](https://neofr.ag).
+## Installation
 
-- Sa rapidité d'exécution permet le chargement des pages en un éclair ! NeoFrag est un CMS petit, mais puissant.
-- De nombreux contenus additionnels seront disponibles sur le site officiel [NeoFrag](https://neofr.ag), thèmes graphiques, modules et widgets pourront être installés automatiquement via l'interface de gestion de votre site.
-- L'architecture innovante de NeoFrag vous permettra de mettre à jour automatiquement et simplement votre site. Gestion évoluée des permissions des utilisateurs via des groupes.
-- Une documentation technique et de nombreux tutoriels vidéo seront mis à disposition pour que les développeurs chevronnés ainsi que les utilisateurs débutants puissent prendre en main aisément NeoFrag.
-- Bénéficiez d'un outil intuitif vous permettant de changer le contenu et la disposition des pages en direct sur votre site. Déplacez une rubrique d'un simple click et appréciez le résultat en live !
-- Des interfaces adaptées pour tout type de support afin de vous offrir une accessibilité optimale à vos contenus. Consultez l'activité de votre site depuis votre tablette ou smartphone ! 
+Prérequis : Rust 1.80+ et MySQL ou MariaDB.
 
-## Prérequis
+```bash
+cargo build --release
+cp neofrag.example.toml neofrag.toml   # puis éditez-le
+./target/release/neofrag               # ou : neofrag /chemin/vers/neofrag.toml
+```
 
-NeoFrag nécessite un hébergement web Apache / PHP / MySQL pour fonctionner.
+Le binaire a besoin du dossier `assets/` (ou de celui indiqué par `site.assets_dir`).
 
-- PHP 5.6 ou supérieur (avec les extensions curl, gd, json, intl, mbstring, mysqli et zip)
-- Module Apache rewrite_module activé
+### Reprendre un site NeoFrag existant
 
-## :fr: Installation
+1. Sauvegardez la base et le dossier `upload/`.
+2. Dans `neofrag.toml` : mettez l'URL de la base (`config/db.php`) et recopiez dans
+   `security.password_salt` la valeur de `$password['salt']` de `config/password.php`.
+3. Pointez `site.upload_dir` sur le dossier `upload/` du site.
+4. Lancez le serveur. Les widgets des modules pas encore portés sont simplement ignorés.
 
-- Copier tous les fichiers et les dossiers de l'archive sur vote site web via FTP
-- Créer une base de données MySQL et importer le fichier DATABASE.sql
-- Éditer le fichier de configuration de la base de données ./config/db.php
-- Connectez-vous sur votre site web avec comme identifiant: admin et mot de passe: admin123
-- Profitez de [NeoFrag](https://neofr.ag) Alpha 0.2.3 !
+### Installation neuve
 
-## :uk: Installation
+```bash
+mysql -e "CREATE DATABASE neofrag CHARACTER SET utf8mb4"
+mysql neofrag < legacy/DATABASE.sql
+```
 
-- Copy all files and directories on website by FTP
-- Create a MySQL database and import DATABASE.sql
-- Edit database config file in ./config/db.php
-- Connect on your website and login with username: admin and password: admin123
-- Let's enjoy [NeoFrag](https://neofr.ag) Alpha 0.2.3!
+Compte initial : `admin` / `admin123` — **changez ce mot de passe** avant toute mise en
+ligne (l'édition du profil n'étant pas encore portée, voir ROADMAP : en attendant,
+ne mettez pas en ligne une installation neuve).
 
-## Contribuer
+### Derrière un reverse proxy
 
-Si ce projet vous intéresse et que vous souhaitez nous aider, rendez-nous visite sur le site [NeoFrag](https://neofr.ag) pour en apprendre d'avantage sur le fonctionnement du CMS.
+Le serveur écoute en HTTP ; mettez nginx, Caddy ou Apache devant pour le HTTPS, activez
+`server.https = true` et transmettez l'adresse du visiteur dans l'en-tête `X-Real-IP`
+(utilisée pour l'historique des connexions et la limitation des tentatives).
 
-- Signalez-nous les bugs que vous remarquez sur [notre forum](https://neofr.ag) ou via [Github](https://github.com/NeoFragCMS/neofrag-cms/issues).
-- Suivez [@NeoFragCMS](https://twitter.com/NeoFragCMS) sur Twitter
+## Organisation du code
 
-Copyright © 2018 Michaël BILCOT & Jérémy VALENTIN
+```
+src/
+  main.rs          routes et démarrage
+  config.rs        neofrag.toml
+  core/            le « framework » : ctx, session, access, layout, panel, bbcode, php (unserialize)…
+  modules/         un fichier par module porté (news, pages, user, members, search, admin)
+  widgets/         un fichier par famille de widgets
+templates/         gabarits Askama (thème Azuro, vues, administration)
+assets/            fichiers statiques repris de l'original (css, js, polices, thèmes)
+legacy/            DATABASE.sql d'origine (schéma de référence)
+```
+
+Chaque fichier indique en tête de quel fichier PHP il est le portage.
+
+## Différences volontaires avec l'original
+
+- Jeton anti-CSRF sur tous les formulaires ; déconnexion en POST.
+- Identifiant de session renouvelé à la connexion ; cookie `HttpOnly` + `SameSite=Lax`.
+- Limitation des tentatives de connexion par adresse IP.
+- BBCode : URL `javascript:` / `data:` refusées dans `[url]` et `[img]`.
+- Tout texte lu en base est ré-encodé avant affichage (une donnée ancienne non encodée
+  ne peut pas injecter de HTML).
+- Les mots de passe restent au format phpass de NeoFrag (compatibilité du schéma) :
+  voir ROADMAP pour le passage à Argon2.
+
+## Développement
+
+```bash
+cargo test      # tests unitaires (mots de passe, unserialize PHP, permissions, BBCode…)
+cargo clippy
+RUST_LOG=neofrag=debug cargo run   # signale les widgets non portés rencontrés
+```
+
+## Licence
+
+LGPL-3.0-or-later, comme NeoFrag. © 2018 Michaël BILCOT & Jérémy VALENTIN pour l'œuvre
+d'origine (thème, feuilles de style, schéma, logique portée) ; voir `COPYING` et
+`COPYING.LESSER`.

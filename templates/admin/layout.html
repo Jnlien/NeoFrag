@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta name="robots" content="noindex, nofollow" />
+	<title>{{ title }} :: Administration</title>
+	<link rel="icon" href="{{ base }}/images/favicon.png" />
+	<link rel="stylesheet" href="{{ base }}/css/bootstrap.min.css" />
+	<link rel="stylesheet" href="{{ base }}/css/icons/fontawesome.min.css" />
+	<style>
+		body { background: #f4f6f9; font-size: 14px; }
+		.admin-sidebar { background: #2b373a; min-height: 100vh; }
+		.admin-sidebar .brand { color: #fff; font-weight: 700; font-size: 18px; padding: 1.25rem 1rem; display: block; }
+		.admin-sidebar .nav-link { color: rgba(255, 255, 255, .7); padding: .65rem 1rem; }
+		.admin-sidebar .nav-link:hover, .admin-sidebar .nav-link.active { color: #fff; background: rgba(255, 255, 255, .08); }
+		.admin-sidebar .nav-link.active { border-left: 3px solid #00d7b3; padding-left: calc(1rem - 3px); }
+		.admin-main { padding: 1.5rem; }
+		.card { border: none; box-shadow: 0 0 15px rgba(0, 0, 0, .05); }
+		.card + .card { margin-top: 1.5rem; }
+		.stat { font-size: 28px; font-weight: 700; }
+		textarea.form-control { font-family: monospace; }
+	</style>
+</head>
+<body>
+<div class="container-fluid">
+	<div class="row">
+		<nav class="col-12 col-md-3 col-lg-2 px-0 admin-sidebar">
+			<a class="brand" href="{{ base }}/admin"><i class="fas fa-tachometer-alt fa-fw"></i> NeoFrag</a>
+			<ul class="nav flex-column">
+				{% for item in menu %}
+				<li class="nav-item"><a class="nav-link{% if item.0 == active %} active{% endif %}" href="{{ base }}/{{ item.1 }}"><i class="{{ item.2 }} fa-fw"></i> {{ item.3 }}</a></li>
+				{% endfor %}
+			</ul>
+		</nav>
+		<main class="col-12 col-md-9 col-lg-10 admin-main">
+			<div class="d-flex align-items-center mb-4">
+				<h4 class="mb-0 mr-auto">{{ title }}</h4>
+				<a class="btn btn-sm btn-outline-secondary mr-2" href="{{ base }}/"><i class="fas fa-external-link-alt fa-fw"></i> Voir le site</a>
+				<form method="post" action="{{ base }}/user/logout" class="d-inline">
+					<input type="hidden" name="csrf" value="{{ csrf }}" />
+					<button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-times fa-fw"></i> {{ username|safe }}</button>
+				</form>
+			</div>
+			{% if let Some(notice) = notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+			{{ content|safe }}
+		</main>
+	</div>
+</div>
+</body>
+</html>

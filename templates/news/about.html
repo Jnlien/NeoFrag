@@ -1,0 +1,28 @@
+<div class="card-group">
+	<div class="card">
+		<div class="card-body">
+			<h5 class="card-title">À propos de l'auteur</h5>
+			<div class="media">
+				{{ avatar|safe }}
+				<div class="media-body">
+					<h5 class="mb-0">{{ author|safe }}</h5>
+					{% if !quote.is_empty() %}<blockquote>{{ quote|safe }}</blockquote>{% endif %}
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="card">
+		<div class="card-body">
+			<h5 class="card-title">Autres actualités de l'auteur</h5>
+			{% if others.is_empty() %}
+			L'auteur n'a pas publié d'autre actualité
+			{% else %}
+			<ul class="list-unstyled">
+				{% for other in others %}
+				<li><a href="{{ other.0 }}">{{ other.1|safe }}</a></li>
+				{% endfor %}
+			</ul>
+			{% endif %}
+		</div>
+	</div>
+</div>

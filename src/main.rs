@@ -1,0 +1,184 @@
+//! NeoFrag — réécriture en Rust du CMS NeoFrag (https://github.com/NeoFrag/NeoFrag).
+//!
+//! Le serveur parle au même schéma MySQL/MariaDB que NeoFrag Alpha 0.2.3 : on peut le
+//! brancher sur la base d'un site existant. Voir README.md et ROADMAP.md.
+
+mod config;
+mod core;
+mod error;
+mod modules;
+mod state;
+mod widgets;
+
+use crate::{
+    config::Config,
+    core::{ctx::Ctx, layout, session},
+    error::AppError,
+    modules::{admin, members, news, pages, search, user},
+    state::AppState,
+};
+use axum::{
+    extract::Request,
+    http::{header, HeaderValue, Method},
+    middleware::{self, Next},
+    response::{IntoResponse, Redirect, Response},
+    routing::{get, post},
+    Extension, Router,
+};
+use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use tower_http::{services::ServeDir, trace::TraceLayer};
+
+/// Page d'accueil : le module ou la page désigné par le réglage `nf_default_page`.
+async fn home(Extension(ctx): Extension<Arc<Ctx>>) -> Result<Response, AppError> {
+    match ctx.settings.get("nf_default_page") {
+        "" | "news" => news::index_page(&ctx, None).await,
+        "members" => members::index(Extension(ctx.clone())).await,
+        "search" => Ok(Redirect::to(&ctx.url("search")).into_response()),
+        name => pages::show(&ctx, name).await,
+    }
+}
+
+/// Tout ce qui n'est pas une route de module : une page statique (`/reglement`) ou une 404.
+async fn fallback(Extension(ctx): Extension<Arc<Ctx>>, request: Request) -> Result<Response, AppError> {
+    if request.method() != Method::GET && request.method() != Method::HEAD {
+        return layout::not_found(&ctx).await;
+    }
+    // `/news/` → `/news`
+    if request.uri().path().len() > 1 && request.uri().path().ends_with('/') && !ctx.path.is_empty() {
+        return Ok(Redirect::permanent(&ctx.url(&ctx.path)).into_response());
+    }
+    let single_segment = !ctx.path.is_empty() && !ctx.path.contains('/');
+    if single_segment && !pages::RESERVED.contains(&ctx.path.as_str()) {
+        return pages::show(&ctx, &ctx.path).await;
+    }
+    layout::not_found(&ctx).await
+}
+
+async fn security_headers(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("SAMEORIGIN"));
+    headers.insert(header::REFERRER_POLICY, HeaderValue::from_static("same-origin"));
+    response
+}
+
+fn router(state: AppState) -> Router {
+    let assets = &state.config.site.assets_dir;
+    let mut statics = Router::new();
+    for dir in ["css", "js", "fonts", "images", "themes", "modules", "widgets"] {
+        statics = statics.nest_service(&format!("/{dir}"), ServeDir::new(assets.join(dir)));
+    }
+    statics = statics.nest_service("/upload", ServeDir::new(&state.config.site.upload_dir));
+
+    let pages = Router::new()
+        .route("/", get(home))
+        // Actualités
+        .route("/news", get(news::index))
+        .route("/news/page/{page}", get(news::index_paged))
+        .route("/news/{id}/{slug}", get(news::show))
+        .route("/news/tag/{tag}", get(news::tag))
+        .route("/news/tag/{tag}/page/{page}", get(news::tag_paged))
+        .route("/news/category/{id}/{name}", get(news::category))
+        .route("/news/category/{id}/{name}/page/{page}", get(news::category_paged))
+        // Membres et utilisateur
+        .route("/members", get(members::index))
+        .route("/members/page/{page}", get(members::index_paged))
+        .route("/user", get(user::index))
+        .route("/user/login", get(user::login_get).post(user::login_post))
+        .route("/user/logout", post(user::logout))
+        .route("/user/{id}/{slug}", get(user::profile))
+        .route("/search", get(search::index))
+        // Administration
+        .route("/admin", get(admin::dashboard))
+        .route("/admin/news", get(admin::news_list))
+        .route("/admin/news/add", get(admin::news_add_get).post(admin::news_add_post))
+        .route("/admin/news/{id}/{slug}", get(admin::news_edit_get).post(admin::news_edit_post))
+        .route("/admin/news/delete/{id}", post(admin::news_delete))
+        .route(
+            "/admin/news/categories/add",
+            get(admin::category_add_get).post(admin::category_add_post),
+        )
+        .route(
+            "/admin/news/categories/{id}/{name}",
+            get(admin::category_edit_get).post(admin::category_edit_post),
+        )
+        .route("/admin/news/categories/delete/{id}", post(admin::category_delete))
+        .route("/admin/pages", get(admin::pages_list))
+        .route("/admin/pages/add", get(admin::page_add_get).post(admin::page_add_post))
+        .route("/admin/pages/{id}/{slug}", get(admin::page_edit_get).post(admin::page_edit_post))
+        .route("/admin/pages/delete/{id}", post(admin::page_delete))
+        .route("/admin/user", get(admin::users))
+        .route("/admin/settings", get(admin::settings_get).post(admin::settings_post))
+        .fallback(fallback)
+        .layer(middleware::from_fn_with_state(state.clone(), session::middleware));
+
+    let app = statics
+        .merge(pages)
+        .layer(middleware::from_fn(security_headers))
+        .layer(TraceLayer::new_for_http());
+
+    let base = &state.config.server.base_url;
+    if base.is_empty() {
+        app
+    } else {
+        Router::new().nest(base, app)
+    }
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
+    tracing::info!("arrêt demandé");
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "neofrag=info,tower_http=info".into()),
+        )
+        .init();
+
+    let config_path = std::env::args()
+        .nth(1)
+        .or_else(|| std::env::var("NEOFRAG_CONFIG").ok())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("neofrag.toml"));
+    let config = Config::load(&config_path)?;
+
+    // Fuseau du serveur de base de données (et non UTC forcé) : les dates s'affichent
+    // comme dans l'installation PHP d'origine.
+    let options = MySqlConnectOptions::from_str(&config.database.url)?.timezone(None::<String>);
+    let db = MySqlPoolOptions::new()
+        .max_connections(config.database.max_connections)
+        .acquire_timeout(Duration::from_secs(10))
+        .connect_with(options)
+        .await
+        .map_err(|e| anyhow::anyhow!("connexion à la base impossible : {e}"))?;
+
+    sqlx::query("SELECT 1 FROM nf_settings LIMIT 1")
+        .fetch_optional(&db)
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!("la base ne contient pas le schéma NeoFrag (importez legacy/DATABASE.sql) : {e}")
+        })?;
+
+    let bind: SocketAddr = config
+        .server
+        .bind
+        .parse()
+        .map_err(|e| anyhow::anyhow!("server.bind invalide : {e}"))?;
+    let state = AppState {
+        db,
+        config: Arc::new(config),
+        login_attempts: Arc::default(),
+    };
+
+    let listener = tokio::net::TcpListener::bind(bind).await?;
+    tracing::info!("NeoFrag à l'écoute sur http://{bind}{}", state.config.server.base_url);
+    axum::serve(listener, router(state).into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    Ok(())
+}

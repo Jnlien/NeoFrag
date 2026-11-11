@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>{{ title|safe }}</title>
+	<meta name="description" content="{{ description|safe }}" />
+	<meta name="generator" content="NeoFrag" />
+	<link rel="icon" href="{{ base }}/images/favicon.png" />
+	<link rel="stylesheet" href="{{ base }}/css/bootstrap.min.css" />
+	<link rel="stylesheet" href="{{ base }}/css/icons/fontawesome.min.css" />
+	<link rel="stylesheet" href="{{ base }}/css/fonts/open-sans.css" />
+	<link rel="stylesheet" href="{{ base }}/css/fonts/titillium-web.css" />
+	<link rel="stylesheet" href="{{ base }}/themes/azuro/css/style.css" />
+	<link rel="stylesheet" href="{{ base }}/widgets/news/css/news.css" />
+</head>
+<body class="module-{{ module }}">
+<header class="header">
+	{% if !zones[0].is_empty() %}
+	<div class="haut azuro-bg-dark py-1">
+		<div class="container">{{ zones[0]|safe }}</div>
+	</div>
+	{% endif %}
+	{% if !zones[1].is_empty() %}
+	<div class="entete py-5">
+		<div class="container">{{ zones[1]|safe }}</div>
+	</div>
+	{% endif %}
+	{% if !zones[2].is_empty() %}
+	<div class="menu bg-white">
+		<div class="container">{{ zones[2]|safe }}</div>
+	</div>
+	{% if !breadcrumb.is_empty() %}
+	<div class="header-breadcrumb azuro-bg-gradient text-white">
+		<div class="container">
+			<div class="row">
+				<div class="col-12">{{ breadcrumb|safe }}</div>
+			</div>
+		</div>
+	</div>
+	{% endif %}
+	{% endif %}
+</header>
+{% if !zones[3].is_empty() %}
+<section id="slider">
+	<div class="container-fluid">{{ zones[3]|safe }}</div>
+</section>
+{% endif %}
+{% if !zones[4].is_empty() %}
+<section class="bg-white border-top border-bottom py-5" id="avant-contenu">
+	<div class="container">{{ zones[4]|safe }}</div>
+</section>
+{% endif %}
+{% if !zones[5].is_empty() %}
+<section class="py-5" id="contenu">
+	<div class="container">{{ zones[5]|safe }}</div>
+</section>
+{% endif %}
+{% if !zones[6].is_empty() %}
+<section class="bg-dark py-5" id="post-contenu">
+	<div class="container">{{ zones[6]|safe }}</div>
+</section>
+{% endif %}
+{% if !zones[7].is_empty() %}
+<footer class="footer azuro-bg-dark py-4">
+	<div class="container">{{ zones[7]|safe }}</div>
+</footer>
+{% endif %}
+<script src="{{ base }}/js/jquery-3.2.1.min.js"></script>
+<script src="{{ base }}/js/popper.min.js"></script>
+<script src="{{ base }}/js/bootstrap.min.js"></script>
+<script src="{{ base }}/themes/azuro/js/azuro.js"></script>
+</body>
+</html>
